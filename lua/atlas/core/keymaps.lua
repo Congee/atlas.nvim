@@ -52,6 +52,7 @@ local config = require("atlas.config")
 ---@field close? AtlasKeymapValue
 
 ---@class AtlasPullsReviewExplorerKeymaps
+---@field toggle_explorer? AtlasKeymapValue
 ---@field find_file? AtlasKeymapValue
 ---@field next_file? AtlasKeymapValue
 ---@field previous_file? AtlasKeymapValue
@@ -81,7 +82,8 @@ local config = require("atlas.config")
 ---@field toggle_resolved? AtlasKeymapValue
 
 ---@class AtlasPullsReviewKeymaps
----@field focus_item? AtlasKeymapValue
+---@field open_item? AtlasKeymapValue
+---@field show_details? AtlasKeymapValue
 ---@field approve? AtlasKeymapValue
 ---@field request_changes? AtlasKeymapValue
 ---@field submit_review? AtlasKeymapValue
@@ -187,13 +189,15 @@ local config = require("atlas.config")
 ---| "pulls.edit_title"
 ---| "pulls.edit_description"
 ---| "pulls.edit_search"
+---| "pulls.review.open_item"
+---| "pulls.review.show_details"
 ---| "pulls.review.approve"
 ---| "pulls.review.request_changes"
 ---| "pulls.review.submit_review"
 ---| "pulls.review.add_task"
 ---| "pulls.review.comment_templates"
----| "pulls.review.focus_item"
 ---| "pulls.review.find_file"
+---| "pulls.review.explorer.toggle_explorer"
 ---| "pulls.review.explorer.find_file"
 ---| "pulls.review.explorer.next_file"
 ---| "pulls.review.explorer.previous_file"
@@ -364,6 +368,8 @@ function M.validate()
 	-- TODO: Give these actions unique default mappings.
 	---@type AtlasKeymapActionId[][]
 	local ALLOWED_CONFLICTS = {
+		{ "ui.select", "pulls.review.open_item" },
+		{ "ui.show_details", "pulls.review.show_details" },
 		{ "ui.comments.add", "pulls.edit_search", "issues.edit_search" },
 		{ "pulls.review.find_file", "pulls.review.explorer.find_file" },
 		{ "ui.next_panel_tab", "pulls.review.explorer.next_file" },
@@ -372,12 +378,7 @@ function M.validate()
 		{ "pulls.edit_title", "pulls.review.explorer.toggle_grouping" },
 		{ "pulls.toggle_repo_issue_state", "pulls.review.diff.toggle_layout" },
 		{ "pulls.checkout", "pulls.review.diff.toggle_compact" },
-		{ "pulls.open_diff", "pulls.review.focus_item" },
-		{
-			"ui.comments.react",
-			"pulls.review.request_changes",
-			"issues.change_reporter",
-		},
+		{ "ui.comments.react", "issues.change_reporter" },
 	}
 
 	local function conflict_allowed(actions)
