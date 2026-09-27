@@ -14,7 +14,16 @@ Review pull requests and manage issues across GitHub, GitLab, Bitbucket and Jira
   <img alt="Jira" src="https://img.shields.io/badge/Jira-0052CC?style=flat-square&logo=jira&logoColor=white">
 </p>
 
-<img alt="Atlas UI" src="https://github.com/user-attachments/assets/de6459f9-f123-40a6-acbd-097a17e7ae86" />
+**Quick links**
+
+- [Configuration](#configuration)
+- [Commands](#commands)
+- GitHub: [Pull requests](#github) · [Issues](#github-issues)
+- GitLab: [Pull requests](#gitlab) · [Issues](#gitlab-issues)
+- [Bitbucket](#bitbucket)
+- [Jira](#jira)
+
+<img alt="Atlas UI" src="https://github.com/user-attachments/assets/62909665-e036-44be-bec0-1d27da613eb6" />
 
 > [!CAUTION]
 > **Still in early development, will have breaking changes!**
@@ -67,16 +76,16 @@ require("atlas").setup({})
 - GitHub: GitHub CLI (`gh`) authenticated with `gh auth login`
 - GitLab: GitLab REST API v4 (`gitlab.com` or self-hosted), Personal Access Token with `api` scope
 
+</details>
+
 > [!tip]
 > It's a good idea to run `:checkhealth atlas` to see if everything is set up correctly.
-
-</details>
 
 ## Features
 
 ### Review Pull Requests
 
-<img alt="AtlasDiff" src="https://github.com/user-attachments/assets/7280373a-f6e9-4847-be64-89e245d461cd">
+<img alt="AtlasDiff" src="https://github.com/user-attachments/assets/38d40d4d-5d1d-4cb5-a597-2d94faabf1a3">
 
 Run `:Atlas review` in a Git repository to pick a pull request, or pass a PR URL directly. Atlas opens it in your configured diff viewer.
 
@@ -112,41 +121,73 @@ My dotfiles include a [Pi extension that wraps this script](https://github.com/e
 <details>
 <summary><strong>LSP for Reviews</strong> - attach LSP to the new side of a diff</summary>
 
-Both sides of a pull request diff are normally built from Git revisions, and Neovim does not attach language servers to such buffers. Set `pulls.diff.lsp.enabled` to attach them to the new side:
+Use your configured language servers for hover and go-to-definition on the new side of AtlasDiff.
 
 ```lua
-pulls = { diff = { lsp = { enabled = true } } }
+pulls = {
+  diff = {
+    lsp = {
+      enabled = true,
+      -- link = { "node_modules", ".venv" }, -- optional dependencies
+    },
+  },
+}
 ```
 
-Atlas then creates a detached worktree at the pull request head and opens the new side from it, so those buffers are real files that language servers, `gd`, and hover all work, if there are no competing mappings. Your checkout and current branch are untouched. The old side stays a revision buffer without a language server.
+Atlas uses a temporary worktree and removes it when the diff closes. Set `link` to symlink dependency folders from your local checkout. See [Pulls Configuration](#pulls-configuration) for all options.
 
-The worktree lives under `stdpath("cache")/atlas/worktrees` and is removed when the diff closes; `pulls.diff.lsp.dir` overrides the location with a path or a function. Files with no counterpart in the worktree (deleted files, binaries, submodules) fall back to revision buffers.
-
-A fresh worktree has no `node_modules`, `.venv`, or other build output, so servers that need them resolve nothing. List those directories in `pulls.diff.lsp.link` to symlink them from your checkout.
-
-The linked directories are read from the repository Atlas diffs against. That is your local clone when Neovim is inside it, or the path mapped in repo_config.paths. Otherwise Atlas diffs against its own cache clone, which has no working tree, and every link entry is skipped.
-
-They are the same directories on disk, so a server that writes into them writes into your project.
+<img alt="lsp-support" src="https://github.com/user-attachments/assets/9d67cd02-f1fa-4ee3-94ad-d11fa1388dbd" />
 
 </details>
 
 ### Also included
 
 <details>
-<summary><strong>Linked issues and PRs</strong> - Jump between issues and pull requests</summary>
-
-Jump from an issue to its PR and back, or browse related issues and sub-issues.
-
-</details>
-
-<details>
-<summary><strong>Pipelines</strong> - View jobs and logs, retry failures, or cancel running work</summary>
+<summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
-  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/c625c4e8-b1ad-4772-b46b-24718ba6fbb7">
+  <img width="85%" alt="View pipelines" src="https://github.com/user-attachments/assets/34b76468-6f91-46ee-a86d-608187060a13">
 </p>
 
-View pipelines and their jobs, inspect their status, and read job logs directly in Atlas. Retry failed pipelines or jobs and cancel work that is still running.
+View pipelines and their jobs, inspect their status, and read job logs directly in Atlas.
+
+Use `:Atlas pipelines <target>` with a branch name, PR URL or number (`123`, `#123`, or GitLab `!123`), or a build URL. Branch names use the local repository; `:Atlas pipelines .` opens builds for the current branch.
+
+#### Pipeline Configuration
+
+Atlas uses your provider's CI by default. Set `ci.backend` to use your own. For Bamboo on Bitbucket, use `require("atlas.pulls.pipelines.bamboo").new(opts)` with `host`, `user`, and `password`.
+
+```lua
+providers = {
+  github = {
+    ci = {
+      backend = {
+        fetch = function(context, opts, done)
+          -- Fetch pipelines with their stages and jobs.
+          done({}, nil)
+        end,
+        fetch_job = function(context, pipeline, job, done)
+          -- Fetch the updated job, including any steps.
+          done(job, nil)
+        end,
+        fetch_job_log = function(context, pipeline, job, done)
+          done({ raw = "Your log output here" }, nil)
+        end,
+        parse = function(log)
+          -- Return cleaned lines or your own nested groups.
+          return log.lines
+        end,
+      },
+      highlights = {
+        { pattern = "^FAIL%s", level = "error" },
+        { pattern = "deprecated", level = "warn", hl_group = "DiagnosticWarn" },
+      },
+    },
+  },
+}
+```
+
+`ci.highlights` controls log highlighting using Lua patterns. Set `level` for a severity color or `hl_group` for an existing Neovim highlight group.
 
 </details>
 
@@ -154,7 +195,7 @@ View pipelines and their jobs, inspect their status, and read job logs directly 
 <summary><strong>Custom actions</strong> - Run project-specific actions for pull requests and issues</summary>
 
 <p align="center">
-  <img width="85%" alt="Atlas custom action" src="https://github.com/user-attachments/assets/a8ca355b-09e2-428c-b3fb-3280fd161110">
+  <img width="85%" alt="Atlas custom action" src="https://github.com/user-attachments/assets/6d1ebd15-0c48-47d2-b108-b281d492827c">
 </p>
 
 Add project-specific actions to pull requests and issues. Custom actions receive the current item and provider context, making it possible to call local scripts, open repositories in tmux, copy branch names, or connect Atlas to your own tooling.
@@ -227,9 +268,10 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 <details>
 <summary><strong>Create</strong> - Create pull requests and issues from Neovim</summary>
-
+  
 <p align="center">
-  <img width="50%" alt="Create pull request" src="https://github.com/user-attachments/assets/d6335c66-35f7-4495-b83a-53819d7ec7d5"><img width="50%" alt="Create issue" src="https://github.com/user-attachments/assets/8f3b06d8-763d-4e0f-ab93-9c3754065ca3">
+  <img width="49%" alt="Create pull request" src="https://github.com/user-attachments/assets/dbaa5fcb-a701-419c-8ad6-a8803a0ffc7d">
+  <img width="49%" alt="Create issue" src="https://github.com/user-attachments/assets/8fdc418c-2a29-4a8a-a748-a7daec021984">
 </p>
 
 Use `:Atlas create [pr|issue]` to create a pull request from the current branch or a new issue. For pull requests, Atlas can fill the description from your template or commits.
@@ -237,26 +279,27 @@ Use `:Atlas create [pr|issue]` to create a pull request from the current branch 
 </details>
 
 <details>
-<summary><strong>Notifications</strong> - Read and clear GitHub and GitLab notifications</summary>
-
-<p align="center">
-  <img width="85%" alt="Notifications" src="https://github.com/user-attachments/assets/117b5ad7-3840-4487-bd91-f2f9bf213428">
-</p>
-
-Open GitHub and GitLab notifications inside Atlas, refresh them, open the related item, and mark notifications as read or done without leaving Neovim.
-
-</details>
-
-<details>
 <summary><strong>Bookmarks</strong> - Save searches and star items locally</summary>
 
 <p align="center">
-  <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/f008d6af-dfc6-4b65-8af1-94cd6ce9fc99">
+  <img width="85%" alt="Bookmarks" src="https://github.com/user-attachments/assets/24e8463a-61c2-4fa7-8240-1425d31c0d61">
 </p>
 
 Save searches as bookmarks, or press `*` to star a pull request or issue. Both appear alongside your configured views.
 
 </details>
+
+### Other features
+
+- Compare branches or commits with `:Atlas diff main...HEAD`.
+- Search with GitHub queries or Jira JQL, with query completion.
+- Use Conventional Comments templates or define your own.
+- Save issue descriptions as templates and reuse them when creating issues.
+- Close or reopen GitHub/GitLab issues and change Jira workflow states.
+- Jump between linked issues and pull requests, or browse related issues and sub-issues.
+- Read GitHub and GitLab notifications, open the related item, and mark them as read or done.
+- Remap shortcuts or assign multiple keys to the same action.
+- Set local repository paths and PR templates per project.
 
 ## Configuration
 
@@ -342,6 +385,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas issues [provider]` - Open an issue provider dashboard
 - `:Atlas review [pull-request-url]` - Review a pull request with the configured diff viewer
 - `:Atlas diff [target]` - Open a Git range or pull request in native AtlasDiff
+- `:Atlas pipelines [target|.]` - Open pipelines by branch name, PR URL or number, or build URL; `.` uses the current branch
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
@@ -471,7 +515,7 @@ pulls = {
 },
 ```
 
-<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/8b570bb3-d073-4ab0-99fc-2d9179e173cd">
+<img alt="GitHub pull requests" src="https://github.com/user-attachments/assets/e18fbbb4-1b93-4059-8b80-0b6ebb7a55c6">
 
 </details>
 
@@ -515,7 +559,7 @@ pulls = {
 },
 ```
 
-<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/bcdd0c9c-e15f-4e82-81fd-cde38aa68a2d">
+<img alt="Bitbucket pull requests" src="https://github.com/user-attachments/assets/d2a9c7cd-6aa5-46dc-bd04-5fd760a9269d">
 
 </details>
 
@@ -568,7 +612,7 @@ pulls = {
 },
 ```
 
-<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/128fe916-e733-4abb-9c5c-5244684f3c41">
+<img alt="GitLab pull requests" src="https://github.com/user-attachments/assets/6b3ea556-68b8-411e-ae2b-464a28071f61">
 
 </details>
 
@@ -650,7 +694,7 @@ issues = {
 },
 ```
 
-<img alt="Jira issues" src="https://github.com/user-attachments/assets/4cb40f1f-0b18-4fb1-82ae-6bc57fc8a7c5">
+<img alt="Jira issues" src="https://github.com/user-attachments/assets/9cbf7ce9-b16f-409d-a8c0-b499af99c127">
 
 </details>
 
@@ -826,6 +870,12 @@ keymaps = {
     edit_title = "T",
     edit_description = "D",
     edit_search = "i",
+    pipelines = {
+      next_job = { "]j", "<Tab>" },
+      previous_job = { "[j", "<S-Tab>" },
+      show_history = "gH",
+      toggle_raw_logs = "gL",
+    },
     review = {
       open_item = "<CR>", -- Open the selected file, review item, or inline comment/note.
       show_details = "K",
