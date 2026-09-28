@@ -268,7 +268,7 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 <details>
 <summary><strong>Create</strong> - Create pull requests and issues from Neovim</summary>
-  
+
 <p align="center">
   <img width="49%" alt="Create pull request" src="https://github.com/user-attachments/assets/dbaa5fcb-a701-419c-8ad6-a8803a0ffc7d">
   <img width="49%" alt="Create issue" src="https://github.com/user-attachments/assets/8fdc418c-2a29-4a8a-a748-a7daec021984">
@@ -317,6 +317,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
   providers = {
     ---@type AtlasGitHubConfig
     github = {
+      -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
