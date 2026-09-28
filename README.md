@@ -143,6 +143,15 @@ Atlas uses a temporary worktree and removes it when the diff closes. Set `link` 
 ### Also included
 
 <details>
+<summary><strong>Repository browser</strong> - Browse repositories from Neovim</summary>
+
+<img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
+
+Browse a repository's README, pull requests, issues, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
+
+</details>
+
+<details>
 <summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
@@ -268,7 +277,7 @@ output:run(cmd, on_exit, { cwd = "/repo" })
 
 <details>
 <summary><strong>Create</strong> - Create pull requests and issues from Neovim</summary>
-  
+
 <p align="center">
   <img width="49%" alt="Create pull request" src="https://github.com/user-attachments/assets/dbaa5fcb-a701-419c-8ad6-a8803a0ffc7d">
   <img width="49%" alt="Create issue" src="https://github.com/user-attachments/assets/8fdc418c-2a29-4a8a-a748-a7daec021984">
@@ -317,6 +326,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
   providers = {
     ---@type AtlasGitHubConfig
     github = {
+      -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
       cache_ttl = 300, -- Set to 0 to disable caching.
     },
 
@@ -389,6 +399,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
+- `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
@@ -865,7 +876,7 @@ keymaps = {
     open_diff = "gd",
     checkout = "gc",
     external_help = "gA", -- Atlas help in external diff viewers
-    toggle_repo_panel = "o",
+    open_repository = "o",
     toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",

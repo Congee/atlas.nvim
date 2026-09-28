@@ -93,6 +93,7 @@ up and what's missing.
       },
       ---@type AtlasGitHubConfig
       github = {
+        -- hostname = "github.company.com", -- Defaults to GH_HOST, then github.com.
         cache_ttl = 300, -- Set to 0 to disable caching.
       },
       ---@type AtlasGitLabConfig
@@ -236,6 +237,10 @@ Use `ctx.output(title)` to show output from a custom action:
         or GitLab merge request (`!123`) is resolved in the current Git
         repository. Use `.` to open the current repository.
         Without a target, Atlas prompts for one.
+
+:Atlas browse [repository URL|.] [page]
+        Open the repository browser. Use `.` for the current repository.
+        Example: `:Atlas browse . branches`
 
 :Atlas clear [cache|notes|stars]
         Clear all Atlas data, or only cached data and cloned repositories,
@@ -681,7 +686,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         open_diff              = "gd",
         checkout               = "gc",
         external_help          = "gA", -- Atlas help in external diff viewers
-        toggle_repo_panel      = "o",
+        open_repository        = "o",
         toggle_repo_issue_state = "t",
         edit_title             = "T",
         edit_description       = "D",
