@@ -143,6 +143,15 @@ Atlas uses a temporary worktree and removes it when the diff closes. Set `link` 
 ### Also included
 
 <details>
+<summary><strong>Repository browser</strong> - Browse repositories from Neovim</summary>
+
+<img alt="repository" src="https://github.com/user-attachments/assets/2462e7ce-7e80-4d6c-badc-d2112c808e12" />
+
+Browse a repository's README, pull requests, issues, builds, branches, tags and releases. Use `:Atlas browse .` for the current repository, or pass a repository URL.
+
+</details>
+
+<details>
 <summary><strong>Pipelines</strong> - Browse jobs, steps, and logs</summary>
 
 <p align="center">
@@ -390,6 +399,7 @@ At some point there will probably an extension for lualine.
 - `:Atlas create [pr|issue]` - Create a pull request or issue
 - `:Atlas search [provider]` - Search configured pull-request and issue providers
 - `:Atlas open [target|.]` - Open a provider URL, Jira key, a PR/issue number in the current repository, or the current repository
+- `:Atlas browse [repository URL|.] [page]` - Open the repository browser, e.g. `:Atlas browse . branches`
 - `:Atlas notes [target]` - Inspect local review notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, local review notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
@@ -866,7 +876,7 @@ keymaps = {
     open_diff = "gd",
     checkout = "gc",
     external_help = "gA", -- Atlas help in external diff viewers
-    toggle_repo_panel = "o",
+    open_repository = "o",
     toggle_repo_issue_state = "t",
     edit_title = "T",
     edit_description = "D",

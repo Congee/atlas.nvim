@@ -202,9 +202,12 @@ local function get_current_user(scope, on_done)
 		on_done("no provider")
 		return
 	end
-	scope.run(function(done)
-		return provider.capabilities.core.fetch_user(done)
-	end, function(user, err)
+	local users = provider.capabilities.users
+	if not users then
+		on_done(nil)
+		return
+	end
+	scope.run(users.fetch_user, function(user, err)
 		if err ~= nil then
 			on_done(tostring(err))
 			return
@@ -399,7 +402,6 @@ function M.refresh_view()
 		end
 
 		local detail = require("atlas.pulls.ui.detail")
-		local repo_detail = require("atlas.pulls.ui.repo_detail")
 		local item = navigation.current_item()
 		if
 			(selected_pr ~= nil and not focused)
@@ -410,16 +412,11 @@ function M.refresh_view()
 			if detail.is_open() then
 				detail.close()
 			end
-			if repo_detail.is_open() then
-				repo_detail.close()
-			end
 			return
 		end
 
 		if detail.is_open() then
 			detail.select(item.pr, { force_refresh = true })
-		elseif repo_detail.is_open() then
-			repo_detail.select(item.repo, { force_refresh = true })
 		end
 	end
 

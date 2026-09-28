@@ -7,7 +7,7 @@ local actions = require("atlas.pulls.actions")
 local controller = require("atlas.pulls.ui.dashboard.controller")
 local registrations = {}
 
----@return PullRequest|nil, PullsRepo|nil
+---@return PullRequest|nil, AtlasRepository|nil
 local function selected_pr()
 	local navigation = require("atlas.ui.navigation")
 	local node = navigation.current_item()
@@ -250,7 +250,7 @@ function M.register(buf, views)
 	utils.insert_if(
 		items,
 		item("pulls.edit_search", {
-			desc = "Edit search",
+			desc = "Edit Current Search",
 			callback = function()
 				run_action("edit_search", false)
 			end,
@@ -325,23 +325,21 @@ function M.register(buf, views)
 	local general = {}
 	utils.insert_if(
 		general,
-		item("pulls.toggle_repo_panel", {
-			desc = "Open repo panel",
+		item("pulls.open_repository", {
+			desc = "Open repository browser",
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local _, repo = selected_pr()
+				local node = require("atlas.ui.navigation").current_item()
+				local repo = type(node) == "table" and node.repo or nil
 				if repo == nil then
 					notify.warn("No repository selected")
 					return
 				end
-				local repo_detail = require("atlas.pulls.ui.repo_detail")
-				if repo_detail.is_open() then
-					repo_detail.close()
+				if state.provider == nil then
+					notify.warn("Repository provider unavailable")
 					return
 				end
-				repo_detail.open(repo, {
-					provider = require("atlas.pulls.state").provider,
-				})
+				require("atlas.ui.repository").open(repo.full_name, state.provider)
 			end,
 		})
 	)

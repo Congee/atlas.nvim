@@ -75,7 +75,7 @@
 ---@class AtlasPullsCustomActionContext
 ---@field repo_path string|nil
 ---@field pr PullRequest
----@field user PullsUser|nil
+---@field user AtlasUser|nil
 ---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasPullsCustomAction
@@ -108,7 +108,7 @@
 
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
----@field user IssueUser|nil
+---@field user AtlasUser|nil
 ---@field output fun(title: string): AtlasLiveOutput
 
 ---@class AtlasIssuesCustomAction
@@ -249,7 +249,7 @@ M.options = {
 			open_diff = "gd",
 			checkout = "gc",
 			external_help = "gA", -- Atlas help in external diff viewers.
-			toggle_repo_panel = "o",
+			open_repository = "o",
 			toggle_repo_issue_state = "t",
 			edit_title = "T",
 			edit_description = "D",

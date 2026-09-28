@@ -43,7 +43,6 @@ local groups = {
 	AtlasBorder = { fg = vim.api.nvim_get_hl(0, { name = "FloatBorder", link = false }).fg },
 
 	AtlasTextMuted = { fg = "#7f849c" },
-	AtlasTextMutedItalic = { fg = "#7f849c", italic = true },
 	AtlasTextMutedStrikethrough = { fg = "#7f849c", strikethrough = true },
 	AtlasTextPositive = { fg = vim.api.nvim_get_hl(0, { name = "DiagnosticOk", link = false }).fg, italic = false },
 	AtlasTextNote = { fg = "#f5bde6", bold = true },
