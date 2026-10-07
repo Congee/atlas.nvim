@@ -377,6 +377,8 @@ function M.set_document(session, document)
 		detach_content_buffer(session, previous)
 		state.right.buf = right_buf
 		if state.right.win and vim.api.nvim_win_is_valid(state.right.win) then
+			-- A hidden buffer stays part of the diff, so leave diff mode before swapping it out.
+			vim.wo[state.right.win][0].diff = false
 			vim.api.nvim_win_set_buf(state.right.win, right_buf)
 		end
 		attach_content_buffer(session, right_buf)
