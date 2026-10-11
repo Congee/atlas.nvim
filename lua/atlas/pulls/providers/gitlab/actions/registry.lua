@@ -214,15 +214,12 @@ end
 
 ---@param opts {
 --- title: string,
---- include_all: boolean,
 --- on_select: fun(project: string),
 --- on_cancel: fun(),
 ---}
 local function select_project(opts)
-	local initial_items = opts.include_all and { { id = "all", label = "All projects", project = "" } } or {}
 	picker.search({
 		title = opts.title,
-		initial_items = initial_items,
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -230,7 +227,7 @@ local function select_project(opts)
 		fetch = function(query, fetch_done)
 			query = vim.trim(query)
 			if query == "" then
-				fetch_done(initial_items, nil)
+				fetch_done({}, nil)
 				return
 			end
 
@@ -298,7 +295,7 @@ end
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function search_merge_requests(project, ctx, done)
 	picker.search({
-		title = project ~= "" and "Search " .. project .. " Merge Requests" or "Search GitLab Merge Requests",
+		title = "Search " .. project .. " Merge Requests",
 		fetch_on_open = false,
 		format_item = function(item)
 			return item.label
@@ -326,10 +323,7 @@ local function search_merge_requests(project, ctx, done)
 			end
 
 			---@type AtlasGitLabPullsViewConfig
-			local view = { name = "Search", scope = "all", search = query }
-			if project ~= "" then
-				view.project = project
-			end
+			local view = { name = "Search", project = project, scope = "all", search = query }
 			return pullrequests_api.fetch_pullrequests(view, {
 				force_refresh = false,
 				pagelen = 30,
@@ -365,7 +359,6 @@ end
 local function search(ctx, done)
 	select_project({
 		title = "Search Merge Requests - Project",
-		include_all = true,
 		on_select = function(project)
 			search_merge_requests(project, ctx, done)
 		end,
@@ -380,7 +373,6 @@ end
 local function open_project(_, done)
 	select_project({
 		title = "Open Project",
-		include_all = false,
 		on_select = function(project)
 			require("atlas").open("pulls", "gitlab", {
 				initial_view = {
@@ -524,7 +516,6 @@ register({
 	run = function(ctx, done)
 		select_project({
 			title = "Browse Repository",
-			include_all = false,
 			on_select = function(project)
 				require("atlas.ui.repository").open(project, ctx.provider)
 				done(nil, nil)
