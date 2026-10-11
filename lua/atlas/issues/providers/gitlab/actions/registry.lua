@@ -91,8 +91,8 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function transition(ctx, done)
 	local issue = assert(ctx.issue)
-	local action = issue.status_id == "closed" and reopen or close
-	action(ctx, done)
+	local action = issue.status_id == "closed" and "reopen" or "close"
+	return actions.run(action, ctx, done)
 end
 
 ---@param ctx AtlasIssueActionContext
