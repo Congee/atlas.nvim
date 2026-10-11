@@ -10,7 +10,6 @@ local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 local activity_component = require("atlas.pulls.ui.detail.components.activity")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
-local overview = require("atlas.pulls.ui.detail.tabs.overview.state")
 
 local PADDING_X = 1
 
@@ -31,15 +30,13 @@ end
 ---@param thread AtlasCommentThreadNode
 ---@param collapsed boolean
 ---@param width integer
----@param format_text (fun(text: string): string)|nil
-local function render_thread(thread, collapsed, width, format_text)
+local function render_thread(thread, collapsed, width)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local fold_keys = keymaps.resolve("ui.toggle_fold")
 	local fold_key = fold_keys and fold_keys[1]
 	local opts = {
 		boxed = true,
-		format_text = format_text,
 		expanded = function()
 			return not collapsed
 		end,
@@ -175,8 +172,7 @@ end
 ---@param item PullsConversationItem
 ---@param width integer
 ---@param has_next boolean
----@param format_text (fun(text: string): string)|nil
-local function render_review(item, width, has_next, format_text)
+local function render_review(item, width, has_next)
 	---@type PullsReviewHistoryEntry
 	local review = item.entity
 	local icon, icon_hl, label = review_status(review)
@@ -187,9 +183,6 @@ local function render_review(item, width, has_next, format_text)
 	end
 
 	local body = review.body or ""
-	if format_text then
-		body = format_text(body)
-	end
 	local lines, spans, line_map = threads.render(
 		{
 			{
@@ -215,26 +208,23 @@ end
 ---@param width integer
 ---@param has_next boolean
 ---@param by_entity table<table, PullsConversationItem>
----@param format_text (fun(text: string): string)|nil
-local function render_entry(entry, width, has_next, by_entity, format_text)
+local function render_entry(entry, width, has_next, by_entity)
 	if entry.type == "comment" then
 		local thread = entry.thread
 		local root = thread.comment
 		if root.is_task then
 			local lines, spans, line_map = comment_threads.render_task_compact(thread, width, {
 				padding_x = PADDING_X,
-				format_text = format_text,
 				content_prefix = has_next and "│ " or "  ",
 			})
 			attach_entities(line_map, by_entity)
 			return lines, spans, line_map
 		end
-		local lines, spans, line_map =
-			render_thread(thread, state.is_collapsed(root.id, #thread.children > 0), width, format_text)
+		local lines, spans, line_map = render_thread(thread, state.is_collapsed(root.id, #thread.children > 0), width)
 		attach_entities(line_map, by_entity)
 		return lines, spans, line_map
 	elseif entry.type == "review" and entry.item then
-		return render_review(entry.item, width, has_next, format_text)
+		return render_review(entry.item, width, has_next)
 	elseif entry.type == "activity_run" then
 		local run_id = tostring(entry.timestamp or "")
 		local activities = {}
@@ -261,10 +251,10 @@ local function is_activity(entry)
 	return entry ~= nil and (entry.type ~= "comment" or entry.thread.comment.is_task == true)
 end
 
----@param pr PullRequest
----@param details PullRequestDetails|nil
+---@param _pr PullRequest
+---@param _details PullRequestDetails|nil
 ---@param width integer
-function M.render(pr, details, width)
+function M.render(_pr, _details, width)
 	local lines, spans, line_map = {}, {}, {}
 
 	if state.error then
@@ -289,18 +279,6 @@ function M.render(pr, details, width)
 		return lines, spans, line_map
 	end
 
-	local reviewers = type(overview.reviewers) == "table" and overview.reviewers or nil
-	local provider = detail.provider
-	local comments = provider and provider.capabilities.comments
-	local formatter = comments and comments.comment_formatter
-	local format_text = formatter
-		and formatter({
-			pr = pr,
-			details = details,
-			conversation = state.comments(),
-			reviewers = reviewers,
-		})
-
 	for index, entry in ipairs(entries) do
 		if #lines > 0 then
 			if is_activity(entry) and is_activity(entries[index - 1]) then
@@ -310,7 +288,7 @@ function M.render(pr, details, width)
 			end
 		end
 		local has_next = is_activity(entry) and is_activity(entries[index + 1])
-		local e_lines, e_spans, e_map = render_entry(entry, width, has_next, by_entity, format_text)
+		local e_lines, e_spans, e_map = render_entry(entry, width, has_next, by_entity)
 		splice(lines, spans, line_map, e_lines, e_spans, e_map)
 	end
 

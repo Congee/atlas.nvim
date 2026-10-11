@@ -151,11 +151,6 @@ local function load(state, page)
 		return
 	end
 	local repository = state.provider.capabilities.repository
-	if not repository then
-		state.branches = "Branches are not available for this provider"
-		render(state)
-		return
-	end
 	local expanded = state.expanded
 	clear_commits(state)
 	state.requests.cancel()
@@ -200,7 +195,7 @@ end
 ---@param state RepositoryBranches
 local function search(state)
 	local repository = state.provider.capabilities.repository
-	if not repository or state.busy then
+	if state.busy then
 		return
 	end
 	local branches = state.branches
@@ -289,9 +284,6 @@ local function open_diff(state)
 	end
 
 	local repository = state.provider.capabilities.repository
-	if not repository then
-		return
-	end
 	local branch = selection.branch
 	local branches = state.branches
 	---@cast branches AtlasRepositoryBranch[]
@@ -399,7 +391,7 @@ local function delete_branch(state)
 		return
 	end
 	local repository = state.provider.capabilities.repository
-	if not repository or not repository.delete_branch then
+	if not repository.delete_branch then
 		return
 	end
 	vim.ui.input({

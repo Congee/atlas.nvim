@@ -81,8 +81,6 @@ local function open(result, callbacks)
 		error(err, 0)
 	end
 
-	local layout = diffview.cur_layout
-	local right = { buf = vim.api.nvim_win_get_buf(layout.b.id), win = layout.b.id }
 	---@type AtlasDiffDiffviewView
 	local view = {
 		tabpage = diffview.tabpage,
@@ -94,9 +92,8 @@ local function open(result, callbacks)
 		expanded_threads = {},
 		hunks = {},
 		split_hunks = {},
-		left = layout.a and { buf = vim.api.nvim_win_get_buf(layout.a.id), win = layout.a.id } or { buf = right.buf },
-		right = right,
 	}
+	update_panes(view)
 
 	diffview.emitter:on("file_open_pre", function()
 		annotation_ui.close(view.tabpage)
@@ -186,14 +183,6 @@ local function get_selection(view)
 
 	local side = left and "LEFT" or "RIGHT"
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local first = vim.api.nvim_win_get_cursor(win)[1]
-	local last = first
-	local mode = vim.fn.mode()
-	if mode == "v" or mode == "V" or mode == "\22" then
-		first = vim.fn.line("v")
-		first, last = math.min(first, last), math.max(first, last)
-		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
-	end
 
 	local function position(line)
 		local from = side == "LEFT" and line or nil
@@ -212,20 +201,7 @@ local function get_selection(view)
 		return { from = from, to = to }
 	end
 
-	local inline = position(last)
-	if first ~= last then
-		local start = position(first)
-		if (start.to ~= nil) ~= (inline.to ~= nil) then
-			return nil, "The selected lines cannot be represented as one review range"
-		end
-		inline.start_from = start.from
-		inline.start_to = start.to
-	end
-	inline.path = file.path
-	inline.old_path = file.old_path
-	inline.commit_hash = view.result.head_revision
-
-	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
+	return annotation_ui.selection(view, file, side, lines, position)
 end
 
 ---@param view AtlasDiffDiffviewView

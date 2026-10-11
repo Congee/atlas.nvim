@@ -247,10 +247,7 @@ end
 ---@param refs GitLabPullRequestDiffRefs|nil
 ---@return boolean
 local function complete_diff_refs(refs)
-	return refs ~= nil
-		and tostring(refs.base_sha or "") ~= ""
-		and tostring(refs.start_sha or "") ~= ""
-		and tostring(refs.head_sha or "") ~= ""
+	return refs ~= nil and (refs.base_sha or "") ~= "" and (refs.start_sha or "") ~= "" and (refs.head_sha or "") ~= ""
 end
 
 ---@param comments PullsComment[]
@@ -374,7 +371,7 @@ function M.discard(pr, _review, on_done)
 	end
 
 	requests.run(function(done)
-		return service.fetch_all_pages(prefix .. "?per_page=100", done, {
+		return service.fetch_all_pages(prefix, done, {
 			action = "Fetch MR draft comments",
 			project_path = path,
 			iid = iid,

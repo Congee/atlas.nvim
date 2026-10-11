@@ -38,7 +38,7 @@ local picker_modules = {
 }
 
 local sizes = {
-	compact = { width = 0.5, height = 0.3 },
+	compact = { width = 0.3, height = 0.3 },
 	list = { width = 0.5, height = 0.5 },
 	preview = { width = 0.7, height = 0.7 },
 }
@@ -155,7 +155,7 @@ function M.multi_select(opts)
 		key = opts.key,
 		multi = true,
 		selected = opts.selected,
-		size = opts.size or sizes.list,
+		size = opts.size or sizes.compact,
 		on_done = function(selected)
 			local selected_keys = {}
 			for _, item in ipairs(selected) do

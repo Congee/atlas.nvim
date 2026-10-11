@@ -1,4 +1,8 @@
-local M = {}
+local M = {
+	-- fetch_releases = nil,
+	-- fetch_release = nil,
+	-- fetch_issue_summary = nil,
+}
 
 local service = require("atlas.providers.bitbucket.client")
 local config = require("atlas.config")
@@ -148,7 +152,7 @@ function M.fetch_workspace_repositories(workspace, search, on_done)
 			return
 		end
 
-		local values = (result or {}).values or {}
+		local values = result.values or {}
 		---@type AtlasRepositoryDetails[]
 		local repositories = {}
 		for _, raw in ipairs(values) do
@@ -167,7 +171,7 @@ end
 ---@param opts PullsFetchOpts
 ---@param on_done fun(repositories: BitbucketRepoTarget[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_project_repositories(project, opts, on_done)
+local function fetch_project_repositories(project, opts, on_done)
 	local workspace = project.workspace
 	local project_key = project.project
 
@@ -194,7 +198,7 @@ function M.fetch_project_repositories(project, opts, on_done)
 			table.insert(repositories, { workspace = workspace, repo = raw.slug })
 		end
 
-		service.set_cache(cache_key, repositories, service.cache_ttl())
+		service.set_cache(cache_key, repositories)
 		on_done(repositories, nil)
 	end, {
 		action = "Fetch project repositories",
@@ -218,7 +222,7 @@ function M.resolve_targets(targets, opts, on_done)
 				return nil
 			end
 			---@cast target BitbucketProjectTarget
-			return M.fetch_project_repositories(target, opts, done)
+			return fetch_project_repositories(target, opts, done)
 		end
 	end
 
@@ -286,6 +290,22 @@ function M.fetch_details(repo, on_done)
 	return requests
 end
 
+---@param base string
+---@param opts { cursor?: string, search?: string }
+---@return string
+local function refs_url(base, opts)
+	local sep = base:find("?") and "&" or "?"
+	local url = string.format("%s%spagelen=100", base, sep)
+	if opts.search and opts.search ~= "" then
+		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
+	end
+	local cursor = opts.cursor
+	if cursor and cursor ~= "" then
+		url = cursor
+	end
+	return url
+end
+
 ---@param repo AtlasRepository
 ---@param opts { cursor?: string, search?: string }
 ---@param on_done fun(branches: AtlasRepositoryBranch[]|nil, err: string|nil, next_cursor: string|nil)
@@ -295,19 +315,11 @@ function M.fetch_branches(repo, opts, on_done)
 	local branches_url = repo.branches_url
 		or string.format("/repositories/%s/%s/refs/branches", url_encode(repo.owner), url_encode(repo.repo_name))
 
-	local sep = branches_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=100", branches_url, sep)
-	if opts.search and opts.search ~= "" then
-		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
-	end
-	local cursor = opts.cursor
-	if cursor and cursor ~= "" then
-		url = cursor
-	end
+	local url = refs_url(branches_url, opts)
 
 	return service.request("GET", url, nil, nil, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
-			on_done(nil, err or "Invalid paginated response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 
@@ -347,19 +359,11 @@ function M.fetch_tags(repo, opts, on_done)
 	local tags_url = repo.tags_url
 		or string.format("/repositories/%s/%s/refs/tags", url_encode(repo.owner), url_encode(repo.repo_name))
 
-	local sep = tags_url:find("?") and "&" or "?"
-	local url = string.format("%s%spagelen=100", tags_url, sep)
-	if opts.search and opts.search ~= "" then
-		url = url .. "&q=" .. url_encode("name~" .. vim.json.encode(opts.search))
-	end
-	local cursor = opts.cursor
-	if cursor and cursor ~= "" then
-		url = cursor
-	end
+	local url = refs_url(tags_url, opts)
 
 	return service.request("GET", url, nil, nil, function(result, err)
-		if err ~= nil or type(result) ~= "table" then
-			on_done(nil, err or "Invalid paginated response")
+		if err then
+			on_done(nil, err)
 			return
 		end
 

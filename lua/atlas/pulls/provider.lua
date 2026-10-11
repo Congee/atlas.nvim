@@ -15,14 +15,6 @@
 ---@field next_cursor table<string, string>|nil
 ---@field total_pages integer|nil
 
----@class AtlasPullsCommentContext
----@field pr PullRequest
----@field details PullRequestDetails|nil
----@field data PullsReviewData|nil
----@field reviewers PullsReviewer[]|nil
----@field conversation PullsComment[]|nil
----@field review_context PullsReviewContext|nil
-
 ---@class PullsProvider
 ---@field id string
 ---@field name string
@@ -35,6 +27,7 @@
 
 ---@class PullsProviderCapabilities : AtlasProviderCapabilities
 ---@field core PullsCoreCapability
+---@field write PullsWriteCapability|nil
 ---@field comments PullsCommentsCapability|nil
 ---@field reviews PullsReviewsCapability|nil
 ---@field tasks PullsTasksCapability|nil
@@ -52,19 +45,20 @@
 ---@field fetch_by_refs fun(refs: PullRequestRef[], opts: PullsFetchOpts, on_done: fun(pulls: PullRequest[], err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_pullrequest fun(ref: PullRequestRef, opts: PullsFetchOpts, on_done: fun(details: PullRequestDetails|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_links (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(links: AtlasRelatedItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field create_pr fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil
----@field update_title fun(pr: PullRequest, title: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field update_description (fun(pr: PullRequest, description: string, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
----@field set_draft fun(pr: PullRequest, draft: boolean, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field decline fun(pr: PullRequest, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
 ---@field merge fun(pr: PullRequest, opts: PullsMergeOpts, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
----@field fetch_reviewer_candidates fun(opts: { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_description fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(description: string|nil, err: string|nil)): { cancel: fun() }|nil
----@field fetch_reviewers (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
----@field update_reviewers fun(pr: PullRequest, reviewers: PullsCreatePRReviewer[], original: PullsCreatePRReviewer[], on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil
+---@field fetch_reviewers fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(reviewers: PullsReviewer[]|nil, err: string|nil)): { cancel: fun() }|nil
 ---@field fetch_merge_checks (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(checks: PullsMergeCheck[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_diffstat (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(entries: PullsDiffstatEntry[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field fetch_commits (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(commits: PullsCommit[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+
+---@class PullsWriteCapability
+---@field create (fun(opts: PullsCreatePROpts, on_done: fun(result: PullsCreatePRResult|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field update (fun(pr: PullRequest, opts: PullsUpdatePROpts, on_done: fun(ok: boolean, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_reviewer_candidates (fun(opts: { repo_slug: string, pr: PullRequest|nil }, on_done: fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_labels (fun(repo_slug: string, on_done: fun(labels: PullsLabel[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
+---@field fetch_assignees (fun(repo_slug: string, on_done: fun(users: AtlasUser[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 
 ---@class PullsAddCommentOpts
 ---@field parent PullsComment|nil          -- reply to this comment
@@ -75,8 +69,6 @@
 
 ---@class PullsCommentsCapability
 ---@field reaction_options PullsReactionOption[]|nil
----@field comment_completion (fun(context: AtlasPullsCommentContext): AtlasMarkdownCompletionProvider|nil)|nil
----@field comment_formatter (fun(context: AtlasPullsCommentContext): fun(text: string): string)|nil
 ---@field fetch_conversation (fun(pr: PullRequest, opts: { force_refresh: boolean|nil }|nil, on_done: fun(items: PullsConversationItem[]|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field add_comment (fun(pr: PullRequest, content: string, opts: PullsAddCommentOpts|nil, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil
 ---@field edit_comment (fun(pr: PullRequest, comment: PullsComment, on_done: fun(comment: PullsComment|nil, err: string|nil)): { cancel: fun() }|nil)|nil

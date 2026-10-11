@@ -7,26 +7,6 @@ local notify = require("atlas.core.notify")
 local state = require("atlas.issues.ui.detail.tabs.conversation.state")
 local detail = require("atlas.issues.ui.detail.state")
 
----@return IssuesCommentsCapability|nil
-local function get_comments()
-	local provider = detail.provider
-	return provider and provider.capabilities.comments or nil
-end
-
----@param issue Issue
----@return AtlasMarkdownCompletionProvider|nil
-local function get_completion(issue)
-	local comments = get_comments()
-	if comments and comments.comment_completion then
-		return comments.comment_completion({
-			issue = issue,
-			details = detail.current_details,
-			comments = state.comments(),
-		})
-	end
-	return nil
-end
-
 ---@param issue Issue
 ---@param amount integer
 local function adjust_comment_count(issue, amount)
@@ -43,16 +23,15 @@ end
 ---@param issue Issue
 ---@param refresh fun()
 function M.add(issue, refresh)
-	local comments = get_comments()
-	if not comments or not comments.add_comment then
-		return
-	end
+	local comments = detail.provider.capabilities.comments
 	md_editor.open({
 		key = "issue-comment-add",
+		completion = {
+			context = { provider = detail.provider.id, issue = { key = issue.key } },
+		},
 		title = " Add Comment ",
 		width_ratio = 0.7,
 		height_ratio = 0.5,
-		completion = get_completion(issue),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -87,25 +66,17 @@ function M.reply(issue, entry, refresh)
 	end
 	---@type IssueComment
 	local comment = item.entity
-	local comments = get_comments()
-	if not comments or not comments.add_comment then
-		return
-	end
-	local completion = get_completion(issue)
-	local mention = ""
-	if completion and completion.format_mention then
-		mention = completion.format_mention(comment.author) or ""
-	end
-	local initial_text = mention ~= "" and (mention .. " ") or ""
+	local comments = detail.provider.capabilities.comments
 
 	local parent = entry.thread_root or comment
 	md_editor.open({
 		key = "issue-comment-reply-" .. tostring(comment.id),
+		completion = {
+			context = { provider = detail.provider.id, issue = { key = issue.key } },
+		},
 		title = " Reply to Comment ",
 		width_ratio = 0.7,
 		height_ratio = 0.5,
-		initial_text = initial_text,
-		completion = completion,
 		preview = comment_threads.render_comment(comment, math.max(math.floor(vim.o.columns * 0.7), 80)),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
@@ -141,17 +112,16 @@ function M.edit(issue, entry, refresh)
 	end
 	---@type IssueComment
 	local comment = item.entity
-	local comments = get_comments()
-	if not comments or not comments.edit_comment then
-		return
-	end
+	local comments = detail.provider.capabilities.comments
 	md_editor.open({
 		key = "issue-comment-edit-" .. tostring(comment.id),
+		completion = {
+			context = { provider = detail.provider.id, issue = { key = issue.key } },
+		},
 		title = " Edit Comment ",
 		width_ratio = 0.7,
 		height_ratio = 0.5,
 		initial_text = tostring(comment.body or ""),
-		completion = get_completion(issue),
 		on_save = function(text)
 			if not text or vim.trim(text) == "" then
 				return
@@ -189,10 +159,7 @@ function M.delete(issue, entry, refresh)
 	end
 	---@type IssueComment
 	local comment = item.entity
-	local comments = get_comments()
-	if not comments or not comments.delete_comment then
-		return
-	end
+	local comments = detail.provider.capabilities.comments
 
 	vim.ui.input({ prompt = "Delete comment? [y/N]: " }, function(input)
 		local confirmed = input and vim.trim(input):lower()
@@ -224,16 +191,8 @@ function M.react(issue, entry, refresh)
 	if not item or item.kind ~= "comment" then
 		return
 	end
-	local comments = get_comments()
-	if not comments or not comments.add_reaction then
-		notify.warn("Provider does not support reactions")
-		return
-	end
-	local options = comments.reaction_options or {}
-	if #options == 0 then
-		notify.warn("No reactions available for this provider")
-		return
-	end
+	local comments = detail.provider.capabilities.comments
+	local options = comments.reaction_options
 	---@type IssueComment
 	local target = item.entity
 	picker.select({

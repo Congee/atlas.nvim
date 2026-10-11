@@ -22,11 +22,12 @@ end
 local function labels(raw_labels)
 	local result = {}
 	for _, raw in ipairs(json.safe_table(raw_labels)) do
-		local name = type(raw) == "string" and raw or json.safe_str(raw.name) or json.safe_str(raw.title)
+		raw = json.safe_table(raw)
+		local name = json.safe_str(raw.title)
 		if name and name ~= "" then
 			table.insert(result, {
 				name = name,
-				color = type(raw) == "table" and json.safe_str(raw.color) or nil,
+				color = json.safe_str(raw.color),
 			})
 		end
 	end
@@ -137,8 +138,8 @@ function M.to_issue_details(raw)
 	return {
 		title = json.safe_str(raw.title),
 		description = json.safe_str(raw.description) or "",
-		assignees = assignees(json.safe_table(raw.assignees).nodes or raw.assignees),
-		labels = labels(json.safe_table(raw.labels).nodes or raw.labels),
+		assignees = assignees(json.safe_table(raw.assignees).nodes),
+		labels = labels(json.safe_table(raw.labels).nodes),
 		milestone = milestone(raw.milestone),
 	}
 end

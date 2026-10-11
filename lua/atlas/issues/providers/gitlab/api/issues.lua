@@ -268,32 +268,6 @@ function M.get_assignees(key, on_done)
 	})
 end
 
----@param issue Issue
----@param description string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-function M.update_description(issue, description, on_done)
-	local path, iid = normalizer.parse_key(tostring(issue.key or ""))
-	if path == "" or iid == nil then
-		on_done(false, "Invalid issue key")
-		return nil
-	end
-
-	local endpoint = string.format("/projects/%s/issues/%d", service.url_encode(path), iid)
-	return service.request("PUT", endpoint, { description = description }, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		invalidate_issue(path, iid)
-		on_done(true, nil)
-	end, {
-		action = "Update issue description",
-		path = path,
-		iid = iid,
-	})
-end
-
 ---@param issue GitLabIssue
 ---@param subscribed boolean
 ---@param on_done fun(subscribed: boolean|nil, err: string|nil)

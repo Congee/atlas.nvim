@@ -221,9 +221,9 @@ function M.fetch_by_refs(refs, opts, on_done)
 	local starts = {}
 	for path, iids in pairs(iids_by_project) do
 		starts[path] = function(done)
-			local sorted_iids = vim.deepcopy(iids)
-			table.sort(sorted_iids)
-			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(sorted_iids, ","))
+			local string_iids = vim.tbl_map(tostring, iids)
+			table.sort(iids)
+			local cache_key = string.format("gitlab_pulls:refs:%s!%s", path, table.concat(iids, ","))
 			if not opts.force_refresh then
 				local cached, ok = service.get_memory_cache(cache_key)
 				if ok then
@@ -231,7 +231,6 @@ function M.fetch_by_refs(refs, opts, on_done)
 					return nil
 				end
 			end
-			local string_iids = vim.tbl_map(tostring, iids)
 			return service.graphql(MR_SUMMARIES_QUERY, { path = path, iids = string_iids }, function(result, err)
 				if err then
 					done(nil, err)
@@ -432,32 +431,66 @@ function M.update_description(pr, description, on_done)
 end
 
 ---@param pr PullRequest
----@param draft boolean
+---@param opts PullsUpdatePROpts
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
-function M.set_draft(pr, draft, on_done)
-	local title = tostring(pr.title or ""):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
-	if title == "" then
-		on_done(false, "MR title is empty after stripping draft prefix")
-		return nil
+function M.update_pr(pr, opts, on_done)
+	local payload = {
+		title = opts.title,
+		description = opts.body,
+		target_branch = opts.base,
+		labels = opts.labels and table.concat(opts.labels, ",") or nil,
+	}
+
+	if opts.reviewers then
+		local ids = {}
+		for _, reviewer in ipairs(opts.reviewers) do
+			ids[#ids + 1] = tonumber(reviewer.provider_id)
+		end
+		payload.reviewer_ids = #ids == 0 and { 0 } or ids
 	end
-	if draft then
-		title = "Draft: " .. title
+	if opts.assignees then
+		local ids = {}
+		for _, user in ipairs(opts.assignees) do
+			ids[#ids + 1] = tonumber(user.id)
+		end
+		payload.assignee_ids = #ids == 0 and { 0 } or ids
 	end
 
-	return update(pr, { title = title }, function(ok, err)
+	if opts.draft ~= nil then
+		local title = (opts.title or pr.title):gsub("^%s*[Dd]raft:%s*", ""):gsub("^%s*WIP:%s*", "")
+		if title == "" then
+			on_done(false, "MR title is empty after stripping draft prefix")
+			return nil
+		end
+		payload.title = opts.draft and "Draft: " .. title or title
+	end
+
+	return update(pr, payload, function(ok, err)
 		if not ok then
 			on_done(false, err)
 			return
 		end
-		pr.title = title
-		pr.state = draft and "draft" or "open"
+		if payload.title then
+			pr.title = payload.title
+		end
+		if opts.draft ~= nil then
+			pr.state = opts.draft and "draft" or "open"
+		end
 		on_done(true, nil)
 	end)
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param pr PullRequest
+---@param draft boolean
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { cancel: fun() }|nil
+function M.set_draft(pr, draft, on_done)
+	return M.update_pr(pr, { draft = draft }, on_done)
+end
+
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
@@ -510,10 +543,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				candidates[key] = true
 				table.insert(reviewers, {
 					label = "@" .. username,
-					user_id = tostring(id),
 					provider_id = tostring(id),
 					selected = selected[key] ~= nil,
-					default = false,
 				})
 			end
 		end
@@ -524,10 +555,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 			if selected[key] and not candidates[key] and tonumber(id) then
 				table.insert(reviewers, {
 					label = "@" .. tostring(reviewer.username),
-					user_id = id,
 					provider_id = id,
 					selected = true,
-					default = false,
 				})
 			end
 		end
@@ -537,8 +566,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 end
 
 ---@param pr PullRequest
----@param reviewers PullsCreatePRReviewer[]
----@param _ PullsCreatePRReviewer[]
+---@param reviewers PullsReviewerCandidate[]
+---@param _ PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_reviewers(pr, reviewers, _, on_done)

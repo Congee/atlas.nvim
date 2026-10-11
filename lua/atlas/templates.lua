@@ -6,11 +6,11 @@ local notify = require("atlas.core.notify")
 local picker = require("atlas.ui.picker")
 local templates_root = vim.fn.stdpath("data") .. "/atlas/issues/templates"
 
----@class IssueTemplateInfo
+---@class AtlasTemplateInfo
 ---@field name string
 ---@field path string
 
----@class AtlasIssueTemplateContext
+---@class AtlasTemplateContext
 ---@field get_description fun(): string
 ---@field set_description fun(description: string): boolean
 
@@ -61,9 +61,9 @@ local function path_for_name(name)
 	return string.format("%s/%s.md", templates_root, normalized_name), normalized_name, nil
 end
 
----@return IssueTemplateInfo[]|nil
+---@return AtlasTemplateInfo[]|nil
 ---@return string|nil
-function M.list()
+local function list()
 	local ok, ensure_err = ensure_templates_dir()
 	if not ok then
 		return nil, ensure_err
@@ -74,7 +74,7 @@ function M.list()
 		return a:lower() < b:lower()
 	end)
 
-	---@type IssueTemplateInfo[]
+	---@type AtlasTemplateInfo[]
 	local templates = {}
 	for _, path in ipairs(paths) do
 		if vim.fn.filereadable(path) == 1 then
@@ -88,34 +88,10 @@ function M.list()
 	return templates, nil
 end
 
----@param title string
----@param templates IssueTemplateInfo[]
----@param on_select fun(template: IssueTemplateInfo|nil)
-function M.pick(title, templates, on_select)
-	picker.select_with_preview({
-		title = title,
-		items = templates,
-		key = function(template)
-			return template.path
-		end,
-		format_item = function(template)
-			return template.name
-		end,
-		preview_item = function(template, done)
-			local content, read_err = M.read(template.name)
-			done({
-				title = template.name,
-				lines = vim.split(read_err or (content ~= "" and content or "Empty template"), "\n", { plain = true }),
-			})
-		end,
-		on_select = on_select,
-	})
-end
-
 ---@param name string
 ---@return string|nil
 ---@return string|nil
-function M.read(name)
+local function read(name)
 	local path, normalized_name, path_err = path_for_name(name)
 	if path == nil then
 		return nil, path_err
@@ -129,6 +105,30 @@ function M.read(name)
 	return table.concat(lines, "\n"), nil
 end
 
+---@param title string
+---@param templates AtlasTemplateInfo[]
+---@param on_select fun(template: AtlasTemplateInfo|nil)
+local function pick(title, templates, on_select)
+	picker.select_with_preview({
+		title = title,
+		items = templates,
+		key = function(template)
+			return template.path
+		end,
+		format_item = function(template)
+			return template.name
+		end,
+		preview_item = function(template, done)
+			local content, read_err = read(template.name)
+			done({
+				title = template.name,
+				lines = vim.split(read_err or (content ~= "" and content or "Empty template"), "\n", { plain = true }),
+			})
+		end,
+		on_select = on_select,
+	})
+end
+
 ---@param name string
 ---@param content string|nil
 ---@param opts? { overwrite?: boolean }
@@ -136,7 +136,7 @@ end
 ---@return string|nil err
 ---@return boolean existed
 ---@return string|nil normalized_name
-function M.write(name, content, opts)
+local function write(name, content, opts)
 	opts = opts or {}
 
 	local path, normalized_name, path_err = path_for_name(name)
@@ -167,7 +167,7 @@ end
 ---@param content string
 ---@param on_done fun(name: string|nil, err: string|nil, overwritten: boolean|nil)
 local function write_with_confirmation(name, content, on_done)
-	local ok, err, existed, normalized_name = M.write(name, content, { overwrite = false })
+	local ok, err, existed, normalized_name = write(name, content, { overwrite = false })
 	local display_name = normalized_name or name
 	if ok then
 		on_done(display_name, nil, false)
@@ -184,7 +184,7 @@ local function write_with_confirmation(name, content, on_done)
 			return
 		end
 
-		local overwrite_ok, overwrite_err, _, final_name = M.write(name, content, { overwrite = true })
+		local overwrite_ok, overwrite_err, _, final_name = write(name, content, { overwrite = true })
 		if not overwrite_ok then
 			on_done(nil, overwrite_err or "Failed to overwrite template")
 			return
@@ -197,7 +197,7 @@ end
 ---@return boolean ok
 ---@return string|nil err
 ---@return string|nil normalized_name
-function M.delete(name)
+local function delete(name)
 	local path, normalized_name, path_err = path_for_name(name)
 	if path == nil then
 		return false, path_err, nil
@@ -207,12 +207,7 @@ function M.delete(name)
 		return false, string.format('Template "%s" not found', tostring(normalized_name)), normalized_name
 	end
 
-	local delete_ok, delete_err = pcall(vim.fn.delete, path)
-	if not delete_ok then
-		return false, tostring(delete_err), normalized_name
-	end
-
-	if vim.fn.filereadable(path) == 1 then
+	if vim.fn.delete(path) ~= 0 then
 		return false, string.format('Failed to delete template "%s"', tostring(normalized_name)), normalized_name
 	end
 
@@ -223,7 +218,7 @@ end
 local function create_template(on_done)
 	markdown_editor.open({
 		key = string.format("template_new_%d", vim.loop.hrtime()),
-		title = " New Issue Template ",
+		title = " New Template ",
 		initial_text = "",
 		on_save = function(text)
 			local markdown = tostring(text or "")
@@ -250,10 +245,10 @@ local function create_template(on_done)
 	})
 end
 
----@param selected IssueTemplateInfo
+---@param selected AtlasTemplateInfo
 ---@param on_done fun(err: string|nil)
 local function edit_template(selected, on_done)
-	local content, read_err = M.read(selected.name)
+	local content, read_err = read(selected.name)
 	if read_err then
 		on_done(read_err)
 		return
@@ -276,7 +271,7 @@ local function edit_template(selected, on_done)
 							return
 						end
 
-						local deleted, delete_err = M.delete(selected.name)
+						local deleted, delete_err = delete(selected.name)
 						if not deleted then
 							on_done(delete_err or "Failed to delete template")
 							return
@@ -289,7 +284,7 @@ local function edit_template(selected, on_done)
 			},
 		},
 		on_save = function(text)
-			local ok, write_err = M.write(selected.name, text, { overwrite = true })
+			local ok, write_err = write(selected.name, text, { overwrite = true })
 			if not ok then
 				on_done(write_err or "Failed to update template")
 				return
@@ -337,7 +332,7 @@ function M.manage(on_done)
 				return
 			end
 
-			local templates, list_err = M.list()
+			local templates, list_err = list()
 			if list_err then
 				finish(list_err)
 				return
@@ -347,7 +342,7 @@ function M.manage(on_done)
 				return
 			end
 
-			M.pick("Edit template", templates, function(selected)
+			pick("Edit template", templates, function(selected)
 				if selected == nil then
 					finish()
 					return
@@ -359,9 +354,9 @@ function M.manage(on_done)
 	})
 end
 
----@param context AtlasIssueTemplateContext
+---@param context AtlasTemplateContext
 local function apply_template(context)
-	local templates, err = M.list()
+	local templates, err = list()
 	if err then
 		notify.error(err, { vim_notify = true })
 		return
@@ -371,12 +366,12 @@ local function apply_template(context)
 		return
 	end
 
-	M.pick("Apply template", templates, function(template)
+	pick("Apply template", templates, function(template)
 		if template == nil then
 			return
 		end
 
-		local content, read_err = M.read(template.name)
+		local content, read_err = read(template.name)
 		if read_err then
 			notify.error(read_err, { vim_notify = true })
 			return
@@ -384,7 +379,7 @@ local function apply_template(context)
 
 		local function replace()
 			if not context.set_description(content or "") then
-				notify.error("Issue description buffer is not available", { vim_notify = true })
+				notify.error("Description buffer is not available", { vim_notify = true })
 				return
 			end
 			notify.info("Applied template: " .. template.name, { vim_notify = true })
@@ -403,7 +398,7 @@ local function apply_template(context)
 	end)
 end
 
----@param context AtlasIssueTemplateContext
+---@param context AtlasTemplateContext
 local function save_template(context)
 	local description = vim.trim(context.get_description())
 	if description == "" then
@@ -433,7 +428,7 @@ local function save_template(context)
 	end)
 end
 
----@param context AtlasIssueTemplateContext
+---@param context AtlasTemplateContext
 function M.open(context)
 	local actions = {
 		{ id = "apply", label = "Apply template", icon = icons.action("success") },
@@ -441,7 +436,7 @@ function M.open(context)
 	}
 
 	picker.select({
-		title = "Issue templates",
+		title = "Templates",
 		items = actions,
 		size = { width = 0.35, height = 0.15 },
 		format_item = icons.format_action,

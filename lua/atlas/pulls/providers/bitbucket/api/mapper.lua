@@ -257,6 +257,31 @@ local function actor(user)
 	}
 end
 
+---@param content table
+---@return string|nil
+local function content_display(content)
+	local raw = tostring(content.raw or "")
+	local names = {}
+	local entities = { amp = "&", lt = "<", gt = ">", quot = '"', apos = "'" }
+
+	for _, id, label in
+		tostring(content.html or ""):gmatch("<span[^>]-data%-atlassian%-id=(['\"])(.-)%1[^>]*>(.-)</span>")
+	do
+		local name = label:gsub("<[^>]*>", ""):gsub("&(#?[%w]+);", function(entity)
+			local hexadecimal = entity:match("^#x(%x+)$")
+			local code = hexadecimal and tonumber(hexadecimal, 16) or tonumber(entity:match("^#(%d+)$"))
+			return code and vim.fn.nr2char(code) or entities[entity]
+		end)
+
+		if name ~= "" then
+			names[id] = name:gsub("([\\`*_~%[%]<>])", "\\%1")
+		end
+	end
+
+	local display = raw:gsub("@{([^}]+)}", names)
+	return display ~= raw and display or nil
+end
+
 ---@param result table|nil
 ---@return PullsActivityEntry[]
 function M.to_activities_list(result)
@@ -293,7 +318,7 @@ function M.to_activities_list(result)
 			})
 		elseif comment ~= nil then
 			local content = as_table(comment.content) or {}
-			local body = tostring(content.raw or "")
+			local body = content_display(content) or tostring(content.raw or "")
 			table.insert(entries, {
 				kind = "comment",
 				date = tostring(comment.created_on or ""),
@@ -384,6 +409,7 @@ function M.to_comment(result)
 		parent_id = parent ~= nil and tonumber(parent.id) or nil,
 		author = actor(entry.user),
 		content_raw = tostring(content.raw or ""),
+		content_display = content_display(content),
 		created_on = tostring(entry.created_on or ""),
 		resolved_on = resolution
 				and is_thread_root
@@ -436,6 +462,7 @@ function M.to_tasks_list(result)
 			parent_id = comment ~= nil and tonumber(comment.id) or nil,
 			author = actor(task.creator),
 			content_raw = tostring(content.raw or ""),
+			content_display = content_display(content),
 			created_on = tostring(task.created_on or ""),
 			resolved_on = type(task.resolved_on) == "string" and task.resolved_on or nil,
 			resolved_by = resolved_by and actor(resolved_by) or nil,

@@ -589,9 +589,7 @@ function M.activate(buf, refresh)
 	if not (buf and vim.api.nvim_buf_is_valid(buf)) then
 		return
 	end
-	if refresh ~= nil then
-		keymaps.setup(buf, refresh)
-	end
+	keymaps.setup(buf, refresh)
 end
 
 function M.deactivate(buf)

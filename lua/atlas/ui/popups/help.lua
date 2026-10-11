@@ -14,7 +14,6 @@ local utils = require("atlas.ui.shared.utils")
 ---@class AtlasHelpGroupOpts
 ---@field buffer integer
 ---@field index? number
----@field add_to_registry? boolean
 
 ---@class AtlasHelpToggleOpts
 ---@field buffer? integer

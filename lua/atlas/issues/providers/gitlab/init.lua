@@ -4,7 +4,6 @@
 ---@field confidential boolean|nil
 
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
-local mentions = require("atlas.providers.gitlab.mentions")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.gitlab.ui.detail")
 local git = require("atlas.core.git")
@@ -14,44 +13,6 @@ local notes_api = require("atlas.issues.providers.gitlab.api.notes")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local request_scope = require("atlas.core.requests")
 local gitlab_query = require("atlas.providers.gitlab.query")
-
----@param issue Issue
----@param opts { force_refresh: boolean|nil }|nil
----@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
----@return { cancel: fun() }|nil
-local function fetch_conversation(issue, opts, on_done)
-	opts = opts or {}
-	local force_refresh = opts.force_refresh == true
-	if tostring(issue.key or "") == "" then
-		on_done(nil, "Invalid issue key")
-		return nil
-	end
-
-	return notes_api.list_conversation(issue, { force_refresh = force_refresh }, function(result, err)
-		if err or result == nil then
-			on_done(nil, err)
-			return
-		end
-		local items = {}
-		for _, comment in ipairs(result.comments) do
-			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
-				kind = "comment",
-				created_at = comment.created or "",
-				entity = comment,
-			})
-		end
-		for index, entry in ipairs(result.events) do
-			table.insert(items, {
-				id = table.concat({ "activity", entry.date or "", index }, ":"),
-				kind = "activity",
-				created_at = entry.date or "",
-				entity = entry,
-			})
-		end
-		on_done(items, nil)
-	end)
-end
 
 ---@return AtlasGitLabIssuesViewConfig[]
 local function views()
@@ -131,18 +92,17 @@ return {
 	view_for_target = view_for_target,
 	issue_ref = issue_ref,
 	capabilities = {
+		actions = require("atlas.issues.providers.gitlab.actions.registry"),
 		core = {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			fetch_links = links_api.fetch_issue,
-			update_description = issues_api.update_description,
 		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
-			comment_completion = mentions.for_issues,
 			-- fetch_activity = nil,
-			fetch_conversation = fetch_conversation,
+			fetch_conversation = notes_api.list_conversation,
 			add_comment = notes_api.add_comment,
 			edit_comment = notes_api.edit_comment,
 			delete_comment = notes_api.delete_comment,

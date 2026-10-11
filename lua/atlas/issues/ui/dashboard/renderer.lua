@@ -106,7 +106,7 @@ function M.render(opts)
 	local actions = {}
 
 	if provider and provider.capabilities.notifications then
-		local count = notif_state.unread_count or 0
+		local count = notif_state.unread_count
 		local bell_icon, bell_hl
 		if count > 0 then
 			bell_icon, bell_hl = icons.general("bell_unread")
@@ -177,17 +177,14 @@ function M.render(opts)
 		})
 	else
 		local issue_groups = state.issue_tree
-		local layout = search_view and tostring(search_view.layout or "plain") or "compact"
-		if layout ~= "compact" then
-			layout = "plain"
-		end
+		local compact = search_view == nil or search_view.layout == "compact"
 		local issues = state.issues
 		if search_view ~= nil then
 			append_search_text(lines, spans, state.query)
 		end
 
 		local has_rows = #issue_groups > 0
-		if layout == "compact" then
+		if compact then
 			has_rows = #issues > 0
 		end
 		if state.is_loading ~= true and not has_rows then
@@ -202,7 +199,7 @@ function M.render(opts)
 				collapsed = state.collapsed_issue_keys,
 			}
 			local tbl_lines, tbl_spans, tbl_map
-			if layout == "compact" then
+			if compact then
 				tbl_lines, tbl_map, tbl_spans = issue_list.render_compact(list_opts, issues)
 			else
 				tbl_lines, tbl_map, tbl_spans = issue_list.render_plain(list_opts, issue_groups)

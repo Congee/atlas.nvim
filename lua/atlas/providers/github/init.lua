@@ -13,18 +13,17 @@ return {
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.github",
-			actions = "atlas.pulls.providers.github.actions.registry",
 			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.github",
-			actions = "atlas.issues.providers.github.actions.registry",
 			icon = { icon = "", hl_group = "AtlasGitHubTheme" },
 			bookmark_key = "S",
 		},
 	},
 	capabilities = {
+		completion = require("atlas.providers.github.completion"),
 		repository = repositories,
 		notifications = notifications,
 		users = users,

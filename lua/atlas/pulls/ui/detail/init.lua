@@ -22,16 +22,6 @@ local DEFAULT_TABS = {
 	},
 }
 
----@param tab_key string
----@return PullsDetailTabModule|nil
-local function tab_module(tab_key)
-	for _, tab in ipairs(state.tabs) do
-		if tab.key == tab_key then
-			return tab.mod
-		end
-	end
-end
-
 local function reset_tabs()
 	for _, tab in ipairs(state.tabs) do
 		if tab.mod.reset then
@@ -41,7 +31,7 @@ local function reset_tabs()
 end
 
 local function render()
-	renderer.render(state.tabs, tab_module)
+	renderer.render(state.tabs)
 end
 
 -- Loading spinner
@@ -68,7 +58,7 @@ local function is_loading()
 	if state.current_pr == nil then
 		return false
 	end
-	local tab = tab_module(state.current_tab)
+	local tab = state.tab_module(state.current_tab)
 	return tab ~= nil and tab.is_loading ~= nil and tab.is_loading()
 end
 
@@ -121,7 +111,7 @@ local function set_tab(tab_key)
 	end
 
 	if old_key then
-		local old_tab = tab_module(old_key)
+		local old_tab = state.tab_module(old_key)
 		if old_tab and old_tab.deactivate then
 			old_tab.deactivate(buf)
 		end
@@ -129,7 +119,7 @@ local function set_tab(tab_key)
 
 	state.current_tab = tab_key
 	if tab_key then
-		local new_tab = tab_module(tab_key)
+		local new_tab = state.tab_module(tab_key)
 		if new_tab and new_tab.activate then
 			new_tab.activate(buf, render_if_open)
 		end
@@ -163,7 +153,7 @@ end
 ---@param pr PullRequest
 ---@param opts { force_refresh: boolean|nil }|nil
 local function load_active_tab(pr, opts)
-	local tab_mod = tab_module(state.current_tab)
+	local tab_mod = state.tab_module(state.current_tab)
 	if tab_mod and tab_mod.on_select then
 		tab_mod.on_select(pr, refresh_callback(pr), opts)
 	end
@@ -250,7 +240,7 @@ local function load_pr(pr, force_refresh)
 			if not same_ref(state.current_pr, pr) then
 				return
 			end
-			state.diffstat = err and err or (entries or {})
+			state.diffstat = err or entries or {}
 			tab_refresh()
 		end)
 	end

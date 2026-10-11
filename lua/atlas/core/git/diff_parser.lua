@@ -96,7 +96,7 @@ end
 ---@param raw string
 ---@return DiffFile[]
 function M.parse(raw)
-	if type(raw) ~= "string" or raw == "" then
+	if raw == "" then
 		return {}
 	end
 

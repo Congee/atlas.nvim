@@ -6,6 +6,7 @@ local json = require("atlas.core.json")
 local config = require("atlas.config")
 local users_api = require("atlas.providers.jira.users")
 local url_encode = require("atlas.core.utils").url_encode
+local request_scope = require("atlas.core.requests")
 
 ---@param story_points_field string
 local function search_fields(story_points_field)
@@ -41,7 +42,7 @@ end
 ---@param extra_fields string[]
 ---@return string[]
 local function detail_fields(extra_fields)
-	local fields = { "description", "labels", "status", "priority", "assignee", "reporter" }
+	local fields = { "summary", "description", "issuetype", "labels", "status", "priority", "assignee", "reporter" }
 	vim.list_extend(fields, extra_fields)
 	return fields
 end
@@ -117,7 +118,7 @@ end
 ---@param query string
 ---@param on_done fun(items: JiraIssuePickerItem[]|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
-function M.search_issue(project, query, on_done)
+function M.issue_picker(project, query, on_done)
 	local q = vim.trim(tostring(query or ""))
 	local project_key = project and project.key
 
@@ -137,7 +138,7 @@ function M.search_issue(project, query, on_done)
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil then
-			on_done(nil, err or "Empty response")
+			on_done(nil, err)
 			return
 		end
 
@@ -167,7 +168,7 @@ end
 
 ---@param ref IssueRef
 ---@param opts IssuesFetchOpts|nil
----@param callback fun(details: IssueDetails|nil, err: string|nil)
+---@param callback fun(details: JiraIssueDetails|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.fetch_issue(ref, opts, callback)
 	local issue_key = tostring(ref.key or "")
@@ -256,7 +257,7 @@ function M.get_issue_history(issue_key, on_done, opts)
 end
 
 ---@param fields table
----@param callback fun(result: table|nil, err: string|nil)
+---@param callback fun(result: JiraIssueEditorResult|nil, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.create_issue(fields, callback)
 	if not fields.summary or fields.summary == "" then
@@ -274,24 +275,18 @@ function M.create_issue(fields, callback)
 		return nil
 	end
 
-	local payload = { fields = fields }
-
-	return service.request("POST", "/issue", payload, function(result, err)
-		if err ~= nil then
+	return service.request("POST", "/issue", { fields = fields }, function(result, err)
+		if err then
 			callback(nil, err)
 			return
 		end
-
 		if not result or not result.key then
 			callback(nil, "Invalid response")
 			return
 		end
 
-		callback({
-			key = result.key,
-			id = result.id,
-			self = result.self,
-		}, nil)
+		service.clear_memory_cache()
+		callback({ key = result.key, id = result.id, self = result.self }, nil)
 	end, {
 		action = "Create issue",
 		summary = fields.summary,
@@ -312,6 +307,9 @@ function M.update_issue(issue_key, fields, callback)
 	local payload = { fields = fields }
 
 	return service.request("PUT", endpoint, payload, function(_, err)
+		if err == nil then
+			service.clear_memory_cache()
+		end
 		callback(err == nil, err)
 	end, {
 		action = "Update issue",
@@ -353,57 +351,43 @@ end
 
 ---@param project_key string
 ---@param callback fun(issue_types: IssueType[]|nil, err: string|nil)
----@return { job_id: integer, cancel: fun() }|nil
+---@return AtlasRequestScope|nil
 function M.get_create_meta(project_key, callback)
 	if project_key == "" then
 		callback(nil, "Missing project key")
 		return nil
 	end
 
-	local escaped_key = url_encode(project_key)
-
-	if service.is_server() then
-		local endpoint = string.format("/issue/createmeta/%s/issuetypes", escaped_key)
-		return service.request("GET", endpoint, nil, function(result, err)
-			if err ~= nil then
+	local endpoint = string.format("/issue/createmeta/%s/issuetypes", url_encode(project_key))
+	local requests = request_scope.new()
+	local issue_types = {}
+	local function fetch(start_at)
+		requests.run(function(done)
+			return service.request(
+				"GET",
+				string.format("%s?startAt=%d&maxResults=100", endpoint, start_at),
+				nil,
+				done,
+				{ action = "Fetch create metadata", project_key = project_key }
+			)
+		end, function(result, err)
+			if err or not result then
 				callback(nil, err or "Empty response")
 				return
 			end
 
-			local raw_types = result.values or {}
-			callback(map_issue_types(raw_types), nil)
-		end, {
-			action = "Fetch create metadata",
-			project_key = project_key,
-		})
-	end
-
-	local endpoint = string.format("/issue/createmeta?projectKeys=%s&expand=projects.issuetypes", escaped_key)
-
-	return service.request("GET", endpoint, nil, function(result, err)
-		if err ~= nil then
-			callback(nil, err or "Empty response")
-			return
-		end
-
-		local projects = json.safe_table(result.projects)
-
-		local matched_project = nil
-		for _, project in ipairs(projects) do
-			if tostring(project.key or "") == project_key then
-				matched_project = project
-				break
+			local raw_types = (service.is_server() and result.values or result.issueTypes) or {}
+			vim.list_extend(issue_types, map_issue_types(raw_types))
+			local next_start = start_at + #raw_types
+			if #raw_types > 0 and result.isLast ~= true and next_start < result.total then
+				fetch(next_start)
+			else
+				callback(issue_types, nil)
 			end
-		end
-
-		local project = matched_project or projects[1]
-		local raw_types = json.safe_table(project and project.issuetypes)
-
-		callback(map_issue_types(raw_types), nil)
-	end, {
-		action = "Fetch create metadata",
-		project_key = project_key,
-	})
+		end)
+	end
+	fetch(0)
+	return requests
 end
 
 ---@param opts { project: string|nil, issue_key: string|nil }
@@ -439,7 +423,7 @@ function M.get_assignable_users(opts, query, callback)
 
 	return service.request("GET", endpoint, nil, function(result, err)
 		if err ~= nil then
-			callback(nil, err or "Empty response")
+			callback(nil, err)
 			return
 		end
 

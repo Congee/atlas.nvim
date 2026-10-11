@@ -2,7 +2,6 @@ local action_runner = require("atlas.core.actions")
 local diff = require("atlas.pulls.diff")
 local git_checkout = require("atlas.core.git.checkout")
 local icons = require("atlas.ui.shared.icons")
-local md_editor = require("atlas.ui.popups.editor")
 local merge_buffer = require("atlas.pulls.ui.merge")
 local notes = require("atlas.pulls.notes")
 local picker = require("atlas.ui.picker")
@@ -10,7 +9,6 @@ local pipeline_api = require("atlas.pulls.pipelines")
 local repository = require("atlas.ui.repository")
 local review = require("atlas.pulls.actions.review")
 local utils = require("atlas.pulls.actions.utils")
-local ui_utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
@@ -32,8 +30,7 @@ local notify = utils.notify
 ---| "checkout"
 ---| "merge"
 ---| "decline"
----| "edit_title"
----| "edit_description"
+---| "edit_pr"
 ---| "ready_for_review"
 ---| "convert_to_draft"
 ---| "edit_reviewers"
@@ -56,6 +53,7 @@ local notify = utils.notify
 ---@field label string
 ---@field icon string|nil
 ---@field hidden boolean|nil
+---@field confirmation boolean|nil
 ---@field is_available (fun(context: AtlasPullActionContext): boolean, string|nil)|nil
 ---@field run fun(context: AtlasPullActionContext, on_done: fun(result: PullsActionResult|nil, err: string|nil)): boolean|nil
 
@@ -67,10 +65,14 @@ local function draft_action(draft)
 	return {
 		id = id,
 		label = label,
-		icon = icons.action(draft and "edit" or "review"),
+		icon = draft and icons.pulls("draft_pr") or icons.action("review"),
 		is_available = function(context)
 			if not context.pr then
 				return false, "No PR selected"
+			end
+			local write = context.provider.capabilities.write
+			if not write or not write.update then
+				return false, "Provider does not support editing pull requests"
 			end
 			if draft and context.pr.state ~= "open" then
 				return false, "PR is not open"
@@ -83,7 +85,7 @@ local function draft_action(draft)
 		run = function(context, done)
 			local pr = assert(context.pr)
 			notify(context, "loading", draft and "Converting to draft..." or "Marking as ready...")
-			context.provider.capabilities.core.set_draft(pr, draft, function(ok, err)
+			context.provider.capabilities.write.update(pr, { draft = draft }, function(ok, err)
 				if err or ok == false then
 					local message = tostring(err or "Unknown error")
 					notify(context, "error", label .. " failed: " .. message)
@@ -179,109 +181,24 @@ function M.open(context, on_done, extra_items)
 	})
 end
 
-M.edit_title = {
-	id = "edit_title",
-	label = "Edit title",
-	icon = icons.action("edit"),
-	is_available = has_pr,
-	run = function(context, done)
-		local pr = assert(context.pr)
-		md_editor.open({
-			key = "pr-title-edit-" .. tostring(pr.id),
-			title = " Edit Title ",
-			width_ratio = 0.5,
-			height_ratio = 0.12,
-			initial_text = pr.title or "",
-			on_save = function(text)
-				local title = text and vim.trim(text) or ""
-				if title == "" or title == pr.title then
-					done({ changed_pr = false }, nil)
-					return
-				end
-				notify(context, "loading", "Updating title...")
-				context.provider.capabilities.core.update_title(pr, title, function(ok, err)
-					if err or ok == false then
-						local message = tostring(err or "Unknown error")
-						notify(context, "error", "Title update failed: " .. message)
-						done(nil, message)
-						return
-					end
-					pr.title = title
-					notify(context, "success", "Title updated", 1200)
-					done({ changed_pr = true, message = "Title updated" }, nil)
-				end)
-			end,
-			on_cancel = function()
-				done({ changed_pr = false }, nil)
-			end,
-		})
-	end,
-}
-
-M.edit_description = {
-	id = "edit_description",
-	label = "Edit description",
+M.edit_pr = {
+	id = "edit_pr",
+	label = "Edit PR",
 	icon = icons.action("edit"),
 	is_available = function(context)
-		if not has_pr(context) then
+		if not context.pr then
 			return false, "No PR selected"
 		end
-		if context.provider.capabilities.core.update_description == nil then
-			return false, "Provider does not support editing the description"
-		end
-		return true
+		local write = context.provider.capabilities.write
+		return write ~= nil and write.update ~= nil, "Provider does not support editing pull requests"
 	end,
 	run = function(context, done)
-		local pr = assert(context.pr)
-		local core = context.provider.capabilities.core
-
-		---@param current string
-		local function edit(current)
-			current = ui_utils.normalize_newlines(current)
-			md_editor.open({
-				key = "pr-description-edit-" .. tostring(pr.id),
-				title = " Edit Description ",
-				initial_text = current,
-				on_save = function(text)
-					local description = text or ""
-					if description == current then
-						notify(context, "info", "Description unchanged", 1200)
-						done({ changed_pr = false, message = "No changes" }, nil)
-						return
-					end
-					notify(context, "loading", "Updating description...")
-					core.update_description(pr, description, function(ok, err)
-						if err or ok == false then
-							local message = tostring(err or "Unknown error")
-							notify(context, "error", "Description update failed: " .. message)
-							done(nil, message)
-							return
-						end
-						if context.details then
-							context.details.description = description
-						end
-						notify(context, "success", "Description updated", 1200)
-						done({ changed_pr = true, message = "Description updated" }, nil)
-					end)
-				end,
-				on_cancel = function()
-					notify(context, "info", "Description unchanged", 1200)
-					done({ changed_pr = false }, nil)
-				end,
-			})
-		end
-
-		-- Always edit against the remote description so a stale panel does not
-		-- silently revert someone else's edit.
-		notify(context, "loading", "Loading description...")
-		core.fetch_description(pr, { force_refresh = true }, function(description, err)
+		require("atlas.pulls.editor").edit(context.provider, assert(context.pr), function(changed, err)
 			if err then
-				local message = tostring(err)
-				notify(context, "error", "Failed to load description: " .. message)
-				done(nil, message)
+				done(nil, err)
 				return
 			end
-			edit(tostring(description or ""))
+			done({ changed_pr = changed }, nil)
 		end)
 	end,
 }
@@ -331,7 +248,8 @@ M.decline = {
 	run = function(context, done)
 		local pr = assert(context.pr)
 		vim.ui.input({ prompt = string.format("Decline PR #%s? [y/N]: ", tostring(pr.id)) }, function(input)
-			if not input or not vim.trim(input):lower():match("^y") then
+			local confirmed = input and vim.trim(input):lower()
+			if confirmed ~= "y" and confirmed ~= "yes" then
 				done({ changed_pr = false, message = "Decline cancelled" }, nil)
 				return
 			end
@@ -359,19 +277,20 @@ M.edit_reviewers = {
 		if not context.pr then
 			return false, "No PR selected"
 		end
+		local write = context.provider.capabilities.write
+		if not write or not write.update or not write.fetch_reviewer_candidates then
+			return false, "Provider does not support editing reviewers"
+		end
 		local state = context.pr.state
 		return state == "open" or state == "draft", "PR is not open"
 	end,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local core = context.provider.capabilities.core
+		local write = context.provider.capabilities.write
 
 		notify(context, "loading", "Loading reviewers...")
-		core.fetch_reviewer_candidates({
+		write.fetch_reviewer_candidates({
 			repo_slug = pr.repo_full_name,
-			repo_root = nil,
-			head = pr.source.branch,
-			base = pr.destination.branch,
 			pr = pr,
 		}, function(reviewers, err)
 			if err then
@@ -404,7 +323,7 @@ M.edit_reviewers = {
 				format_item = function(reviewer)
 					return reviewer.label
 				end,
-				title = string.format("Reviewers for #%s", tostring(pr.id or "")),
+				title = string.format("Reviewers for #%s", tostring(pr.id)),
 				on_done = function(chosen)
 					local changed = #chosen ~= #original
 					if not changed then
@@ -425,7 +344,7 @@ M.edit_reviewers = {
 					end
 
 					notify(context, "loading", "Updating reviewers...")
-					core.update_reviewers(pr, chosen, original, function(ok, update_err)
+					write.update(pr, { reviewers = chosen }, function(ok, update_err)
 						if update_err or ok == false then
 							local message = tostring(update_err or "Unknown error")
 							notify(context, "error", "Update reviewers failed: " .. message)
@@ -496,7 +415,7 @@ M.checkout = {
 
 		---@param selected PullRequest
 		local function checkout(selected)
-			notify(context, "loading", string.format("Checking out PR #%s", tostring(selected.id or "")))
+			notify(context, "loading", string.format("Checking out PR #%s", tostring(selected.id)))
 			git_checkout.checkout_pr(selected, function(_, err)
 				vim.schedule(function()
 					if err then
@@ -504,7 +423,7 @@ M.checkout = {
 						done(nil, tostring(err))
 						return
 					end
-					notify(context, "success", string.format("Checked out PR #%s", tostring(selected.id or "")))
+					notify(context, "success", string.format("Checked out PR #%s", tostring(selected.id)))
 					done({ changed_pr = false, message = "Checked out PR" }, nil)
 				end)
 			end)

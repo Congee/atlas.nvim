@@ -7,8 +7,6 @@ local bitbucket_query = require("atlas.providers.bitbucket.query")
 local bitbucket_search = require("atlas.providers.bitbucket.completion.search")
 local picker = require("atlas.ui.picker")
 local state = require("atlas.pulls.state")
-local pullrequests = require("atlas.pulls.providers.bitbucket.api.pullrequests")
-local reviews = require("atlas.pulls.providers.bitbucket.api.reviews")
 local users_api = require("atlas.providers.bitbucket.users")
 local repositories = require("atlas.providers.bitbucket.repositories")
 
@@ -29,7 +27,8 @@ local function approve_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not reviews.has_action(ctx.pr, "approve") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.approve or "") == "" then
 		return false, "No approve URL available"
 	end
 	return true, nil
@@ -41,7 +40,8 @@ local function merge_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not pullrequests.has_action(ctx.pr, "merge") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.merge or "") == "" then
 		return false, "No merge URL available"
 	end
 	return true, nil
@@ -53,7 +53,8 @@ local function decline_available(ctx)
 	if not actions.decline.is_available(ctx) or ctx.pr == nil then
 		return false, "PR is not open"
 	end
-	if not pullrequests.has_action(ctx.pr, "decline") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.decline or "") == "" then
 		return false, "No decline URL available"
 	end
 	return true, nil
@@ -65,7 +66,8 @@ local function request_changes_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
-	if not reviews.has_action(ctx.pr, "request_changes") then
+	---@cast ctx.pr BitbucketPullRequest
+	if (ctx.pr.links.request_changes or "") == "" then
 		return false, "No request changes URL available"
 	end
 	return true, nil
@@ -169,8 +171,7 @@ register({
 	run = actions.decline.run,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
+register(actions.edit_pr)
 register(actions.ready_for_review)
 register(actions.convert_to_draft)
 register(actions.edit_reviewers)

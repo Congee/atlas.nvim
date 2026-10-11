@@ -8,15 +8,6 @@ local SUBJECT_KIND = {
 	CheckSuite = "checks",
 }
 
----@param reason string
----@return string
-local function pretty_reason(reason)
-	if reason == nil or reason == "" then
-		return ""
-	end
-	return (reason:gsub("_", " "))
-end
-
 ---@param raw table
 ---@return AtlasNotification
 local function normalize(raw)
@@ -42,7 +33,7 @@ local function normalize(raw)
 	if repo ~= "" then
 		table.insert(subtitle_parts, repo)
 	end
-	local reason = pretty_reason(tostring(raw.reason or ""))
+	local reason = tostring(raw.reason or ""):gsub("_", " ")
 	if reason ~= "" then
 		table.insert(subtitle_parts, reason)
 	end

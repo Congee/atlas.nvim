@@ -34,8 +34,7 @@ local function job_row(pipeline, stage, job, loading_frame, selection)
 				icon = step_icon,
 				label = string.format("%s %s", step_icon, step.name),
 				icon_hl = step_hl,
-				duration = seconds
-					and (seconds < 60 and string.format("%ds", math.floor(seconds)) or utils.human_duration(seconds)),
+				duration = seconds and pipeline_utils.format_duration(seconds),
 				_item = { pipeline = pipeline, stage = stage, job = job, step = index },
 			}
 		end

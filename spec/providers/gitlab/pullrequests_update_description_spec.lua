@@ -102,6 +102,39 @@ describe("gitlab pull request updates", function()
 		assert.same({ squash = true, should_remove_source_branch = true, squash_commit_message = "Subject" }, calls[2])
 	end)
 
+	it("clears selections and removes draft from a changed title", function()
+		stub_service(function(_, _, payload, callback)
+			table.insert(calls, payload)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = { id = 12, repo_full_name = "group/project", title = "Draft: Old title", state = "draft" }
+
+		api.update_pr(pr, {
+			title = "Draft: New title",
+			body = "",
+			draft = false,
+			labels = {},
+			assignees = {},
+			reviewers = {},
+		}, function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+
+		assert.same({
+			{
+				title = "New title",
+				description = "",
+				labels = "",
+				assignee_ids = { 0 },
+				reviewer_ids = { 0 },
+			},
+		}, calls)
+		assert.equal("New title", pr.title)
+		assert.equal("open", pr.state)
+	end)
+
 	it("propagates errors from the request", function()
 		stub_service(function(_, _, _, callback)
 			callback(nil, "boom")

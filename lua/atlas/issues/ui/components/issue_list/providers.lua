@@ -30,7 +30,7 @@ end
 ---@param opts { reloading?: table<string, boolean>, spinner?: string }
 ---@return string
 local function status_value(issue, opts)
-	local issue_key = tostring(issue.key or "")
+	local issue_key = issue.key
 	if opts.reloading and opts.reloading[issue_key] then
 		return string.format(" %s ", opts.spinner)
 	end
@@ -60,105 +60,24 @@ local function person_highlight(issue, col, ctx)
 	end
 end
 
-local function github(opts)
-	local function state_icon(status_id)
-		if status_id == "closed" then
-			return icons.pulls_status("successful"), "AtlasIssueClosed"
-		end
-		return icons.issues("issue"), "AtlasIssueOpen"
+local function state_icon(status_id)
+	if status_id == "closed" then
+		return icons.pulls_status("successful"), "AtlasIssueClosed"
 	end
+	return icons.issues("issue"), "AtlasIssueOpen"
+end
 
-	local function state_chip_hl(status_id)
-		return status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip"
-	end
+local function state_chip_hl(status_id)
+	return status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip"
+end
 
-	---@param issue GitHubIssue
-	local function key_label(issue)
-		return string.format("#%d", issue.number)
-	end
-
-	local function github_columns(layout)
-		local result = {
-			{ key = "icon", name = "", can_grow = false, align = "center", header_hl = "AtlasColumnHeader" },
-			{ key = "name", name = "Issue", min_width = 42, header_hl = "AtlasColumnHeader" },
-			{
-				key = "comments",
-				name = icons.general("comment"),
-				min_width = 2,
-				can_grow = false,
-				header_hl = "AtlasColumnHeader",
-			},
-			{
-				key = "assignee",
-				name = string.format("%s Assignee", icons.general("user")),
-				min_width = 10,
-				max_width = 22,
-				can_grow = false,
-				header_hl = "AtlasColumnHeader",
-			},
-			{
-				key = "reporter",
-				name = string.format("%s Reporter", icons.general("user")),
-				min_width = 10,
-				max_width = 22,
-				can_grow = false,
-				header_hl = "AtlasColumnHeader",
-			},
-		}
-		if layout == "compact" then
-			table.insert(result, {
-				key = "created",
-				name = icons.general("created"),
-				can_grow = false,
-				header_hl = "AtlasColumnHeader",
-			})
-			table.insert(result, {
-				key = "updated",
-				name = icons.general("updated"),
-				can_grow = false,
-				header_hl = "AtlasColumnHeader",
-			})
-		end
-		table.insert(result, {
-			key = "status",
-			name = " Status",
-			can_grow = false,
-			header_hl = "AtlasColumnHeader",
-		})
-		return result
-	end
-
-	local function values(issue, is_child, layout)
-		---@cast issue GitHubIssue
-		local label = key_label(issue)
-		local is_pinned = issue.is_pinned == true
-		local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
-		local name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. (issue.title or ""))
-			or (label .. " " .. (issue.title or ""))
-
-		local result = {
-			icon = is_child and "" or row_icon,
-			name = name,
-			_key_label = label,
-			comments = tostring(tonumber(issue.comment_count) or 0),
-			assignee = person_value(issue.assignee, "Unassigned"),
-			reporter = person_value(issue.reporter, "Unknown"),
-			status = status_value(issue, opts),
-		}
-		if layout == "compact" then
-			result.created = utils.relative_time(issue.created_at)
-			result.updated = utils.relative_time(issue.updated_at)
-			result._meta = issue.repo_full_name
-		end
-		return result
-	end
-
-	local function highlights(table_row, col, ctx)
+local function state_highlights(opts)
+	return function(table_row, col, ctx)
 		local issue = table_row._issue
 		if issue == nil then
 			return nil
 		end
-		---@cast issue GitHubIssue
+		---@cast issue GitHubIssue|GitLabIssue
 
 		if col.key == "icon" then
 			local icon, icon_hl
@@ -183,7 +102,7 @@ local function github(opts)
 				end
 			end
 
-			local label = table_row._key_label or key_label(issue)
+			local label = table_row._key_label
 			local start_col, end_col = ctx.text:find(label, 1, true)
 			if start_col then
 				table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = "AtlasTextMuted" })
@@ -203,33 +122,99 @@ local function github(opts)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = "AtlasTextMuted" } }
 		end
 		if col.key == "status" then
-			local issue_key = tostring(issue.key or "")
+			local issue_key = issue.key
 			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
 				or state_chip_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
 		end
 		return person_highlight(issue, col, ctx)
 	end
+end
+
+local function github(opts)
+	---@param issue GitHubIssue
+	local function key_label(issue)
+		return string.format("#%d", issue.number)
+	end
+
+	local function github_columns(layout)
+		local result = {
+			{ key = "icon", name = "", can_grow = false, align = "center" },
+			{ key = "name", name = "Issue", min_width = 42 },
+			{
+				key = "comments",
+				name = icons.general("comment"),
+				min_width = 2,
+				can_grow = false,
+			},
+			{
+				key = "assignee",
+				name = string.format("%s Assignee", icons.general("user")),
+				min_width = 10,
+				max_width = 22,
+				can_grow = false,
+			},
+			{
+				key = "reporter",
+				name = string.format("%s Reporter", icons.general("user")),
+				min_width = 10,
+				max_width = 22,
+				can_grow = false,
+			},
+		}
+		if layout == "compact" then
+			table.insert(result, {
+				key = "created",
+				name = icons.general("created"),
+				can_grow = false,
+			})
+			table.insert(result, {
+				key = "updated",
+				name = icons.general("updated"),
+				can_grow = false,
+			})
+		end
+		table.insert(result, {
+			key = "status",
+			name = " Status",
+			can_grow = false,
+		})
+		return result
+	end
+
+	local function values(issue, is_child, layout)
+		---@cast issue GitHubIssue
+		local label = key_label(issue)
+		local is_pinned = issue.is_pinned == true
+		local row_icon = is_pinned and icons.general("pin") or state_icon(issue.status_id)
+		local name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. issue.title)
+			or (label .. " " .. issue.title)
+
+		local result = {
+			icon = is_child and "" or row_icon,
+			name = name,
+			_key_label = label,
+			comments = tostring(tonumber(issue.comment_count) or 0),
+			assignee = person_value(issue.assignee, "Unassigned"),
+			reporter = person_value(issue.reporter, "Unknown"),
+			status = status_value(issue, opts),
+		}
+		if layout == "compact" then
+			result.created = utils.relative_time(issue.created_at)
+			result.updated = utils.relative_time(issue.updated_at)
+			result._meta = issue.repo_full_name
+		end
+		return result
+	end
 
 	return {
 		columns = github_columns,
 		values = values,
-		highlights = highlights,
+		highlights = state_highlights(opts),
 	}
 end
 
 local function gitlab(opts)
-	local function state_icon(status_id)
-		if status_id == "closed" then
-			return icons.pulls_status("successful"), "AtlasIssueClosed"
-		end
-		return icons.issues("issue"), "AtlasIssueOpen"
-	end
-
-	local function state_chip_hl(status_id)
-		return status_id == "closed" and "AtlasIssueClosedChip" or "AtlasIssueOpenChip"
-	end
-
 	---@param issue GitLabIssue
 	local function key_label(issue)
 		return string.format("#%d", issue.iid)
@@ -241,8 +226,8 @@ local function gitlab(opts)
 		local row_icon = state_icon(issue.status_id)
 		return {
 			icon = is_child and "" or row_icon,
-			name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. (issue.title or ""))
-				or (label .. " " .. (issue.title or "")),
+			name = is_child and ("  " .. row_icon .. "  " .. label .. " " .. issue.title)
+				or (label .. " " .. issue.title),
 			_key_label = label,
 			assignee = person_value(issue.assignee, "Unassigned"),
 			reporter = person_value(issue.reporter, "Unknown"),
@@ -250,57 +235,7 @@ local function gitlab(opts)
 		}
 	end
 
-	local function highlights(table_row, col, ctx)
-		local issue = table_row._issue
-		if issue == nil then
-			return nil
-		end
-		---@cast issue GitLabIssue
-
-		if col.key == "icon" then
-			local icon, icon_hl = state_icon(issue.status_id)
-			local start_col, end_col = ctx.text:find(icon, 1, true)
-			if start_col then
-				return { { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl } }
-			end
-		end
-
-		if col.key == "name" then
-			local spans = {}
-			if (tonumber(table_row._tv2_depth) or 0) > 0 then
-				local icon, icon_hl = state_icon(issue.status_id)
-				local start_col, end_col = ctx.text:find(icon, 1, true)
-				if start_col then
-					table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = icon_hl })
-				end
-			end
-
-			local label = table_row._key_label or key_label(issue)
-			local start_col, end_col = ctx.text:find(label, 1, true)
-			if start_col then
-				table.insert(spans, { start_col = start_col - 1, end_col = end_col, hl_group = "AtlasTextMuted" })
-				local title_start = end_col + 2
-				if title_start <= #ctx.text then
-					table.insert(spans, {
-						start_col = title_start - 1,
-						end_col = #ctx.text,
-						hl_group = "Normal",
-					})
-				end
-			end
-			return #spans > 0 and spans or nil
-		end
-
-		if col.key == "status" then
-			local issue_key = tostring(issue.key or "")
-			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
-				or state_chip_hl(issue.status_id)
-			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
-		end
-		return person_highlight(issue, col, ctx)
-	end
-
-	return { columns = columns, values = values, highlights = highlights }
+	return { columns = columns, values = values, highlights = state_highlights(opts) }
 end
 
 local function jira(opts)
@@ -352,7 +287,7 @@ local function jira(opts)
 						table.insert(spans, {
 							start_col = title_start - 1,
 							end_col = #ctx.text,
-							hl_group = helper.issue_title_hl(),
+							hl_group = "Normal",
 						})
 					end
 					table.insert(spans, {
@@ -374,7 +309,7 @@ local function jira(opts)
 		end
 
 		if col.key == "status" then
-			local issue_key = tostring(issue.key or "")
+			local issue_key = issue.key
 			local hl = opts.reloading and opts.reloading[issue_key] and "AtlasTextMuted"
 				or helper.status_hl(issue.status_id)
 			return { { start_col = 0, end_col = #ctx.padded, hl_group = hl } }
@@ -398,7 +333,7 @@ local function default()
 		values = function(issue)
 			return {
 				icon = "",
-				name = (issue.key or "") .. " " .. (issue.title or ""),
+				name = (issue.key or "") .. " " .. issue.title,
 				assignee = (issue.assignee and issue.assignee.name) or "Unassigned",
 				reporter = (issue.reporter and issue.reporter.name) or "Unknown",
 				status = string.format(" %s ", issue.status or ""),

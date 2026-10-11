@@ -70,21 +70,7 @@ end
 ---@param right PullsReviewer
 ---@return boolean
 local function same_reviewer(left, right)
-	local left_provider = tostring(left.provider_id or "")
-	local right_provider = tostring(right.provider_id or "")
-	if left_provider ~= "" and right_provider ~= "" then
-		return left_provider:lower() == right_provider:lower()
-	end
-
-	local left_id = tostring(left.id or "")
-	local right_id = tostring(right.id or "")
-	if left_id ~= "" and right_id ~= "" then
-		return left_id == right_id
-	end
-
-	local left_username = tostring(left.username or "")
-	local right_username = tostring(right.username or "")
-	return left_username ~= "" and right_username ~= "" and left_username:lower() == right_username:lower()
+	return left.provider_id:lower() == right.provider_id:lower()
 end
 
 ---@param reviewers PullsReviewer[]
@@ -157,7 +143,7 @@ function M.to_reviewers(raw)
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequestEvents)) do
 		local reviewer = pull_reviewer(node.requestedReviewer, "pending", "reviewer")
 		if reviewer then
-			requested[tostring(reviewer.provider_id):lower()] = true
+			requested[reviewer.provider_id:lower()] = true
 		end
 	end
 
@@ -165,7 +151,7 @@ function M.to_reviewers(raw)
 	for _, node in ipairs(github_mapping.connection_nodes(raw.reviewRequests)) do
 		local reviewer = pull_reviewer(node.requestedReviewer or node, "pending", "reviewer")
 		if reviewer then
-			requested[tostring(reviewer.provider_id):lower()] = true
+			requested[reviewer.provider_id:lower()] = true
 			table.insert(active, reviewer)
 		end
 	end
@@ -180,7 +166,7 @@ function M.to_reviewers(raw)
 			if state == "DISMISSED" then
 				remove_reviewer(reviewers, reviewer)
 			elseif decision then
-				if requested[tostring(reviewer.provider_id):lower()] then
+				if requested[reviewer.provider_id:lower()] then
 					reviewer.role = "reviewer"
 				end
 				upsert_reviewer(reviewers, reviewer)
@@ -238,9 +224,7 @@ function M.to_pull_request(raw)
 			https_url = https_url,
 			ssh_url = json.safe_str(raw_repository.sshUrl),
 		},
-		comments_count = tonumber(raw.totalCommentsCount) or tonumber(raw.commentsCount) or tonumber(
-			json.safe_table(raw.comments).totalCount
-		) or tonumber(raw.comments) or 0,
+		comments_count = tonumber(raw.totalCommentsCount) or 0,
 		created_on = tostring(raw.createdAt or ""),
 		updated_on = tostring(raw.updatedAt or ""),
 		link = {
@@ -381,12 +365,9 @@ end
 local function comment(raw, raw_user)
 	return {
 		id = raw.id,
-		parent_id = nil,
 		author = comment_author(raw_user),
 		content_raw = body_text(raw.body),
 		created_on = tostring(raw.created_at or raw.submitted_at or ""),
-		inline = nil,
-		url = nil,
 		html_url = tostring(raw.html_url or ""),
 		reactions = github_mapping.reaction_counts(raw.reactions),
 	}
@@ -460,7 +441,6 @@ function M.to_comment(raw, thread_state)
 	result.parent_id = json.nilify(raw.in_reply_to_id)
 	result.file = file
 	result.inline = inline
-	result.is_task = nil
 	if thread_state then
 		result.pending = thread_state.pending == true
 		result.outdated = thread_state.outdated == true
@@ -495,15 +475,14 @@ function M.to_review_comment(node, thread, fallback_parent)
 		original_start_line = thread.originalStartLine or node.originalStartLine,
 		side = thread.diffSide,
 		start_side = thread.startDiffSide,
-		url = node.url,
 		html_url = node.url,
 		created_at = node.createdAt,
-		reactions = github_mapping.reaction_groups(node.reactionGroups),
 	}, {
 		pending = review.state == "PENDING",
 		resolved = thread.isResolved == true,
 		outdated = thread.isOutdated == true,
 	})
+	result.reactions = github_mapping.reaction_groups(node.reactionGroups)
 	result.thread_id = json.safe_str(thread.id)
 	result._raw = {
 		comment_id = tostring(node.id or ""),

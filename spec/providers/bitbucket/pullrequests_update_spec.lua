@@ -107,6 +107,26 @@ describe("bitbucket pull request updates", function()
 		end
 	end)
 
+	it("preserves explicit empty selections and false draft", function()
+		stub_service(function(_, _, _, body, callback)
+			table.insert(calls, body)
+			callback({}, nil)
+		end)
+		local api = fresh_module()
+		local pr = { id = 5, links = { self = "url" } }
+
+		api.update_pr(pr, { body = "", draft = false, reviewers = {} }, function(ok, err)
+			assert.is_true(ok)
+			assert.is_nil(err)
+		end)
+		api.update_pr(pr, { title = "New title" }, function() end)
+
+		assert.same({
+			vim.json.encode({ description = "", draft = false, reviewers = {} }),
+			vim.json.encode({ title = "New title" }),
+		}, calls)
+	end)
+
 	it("propagates errors from the request", function()
 		stub_service(function(_, _, _, _, callback)
 			callback(nil, "boom")

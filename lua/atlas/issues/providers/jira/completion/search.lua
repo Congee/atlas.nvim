@@ -1,6 +1,6 @@
 local M = {}
 
-local prompt = require("atlas.commands.search.prompt")
+local prompt = require("atlas.ui.prompt")
 local autocomplete_api = require("atlas.issues.providers.jira.api.autocomplete")
 
 local MAX_COMPLETIONS = 10
@@ -360,7 +360,7 @@ local function connector_tokens(prefix, reserved_words)
 	local out, seen = {}, {}
 
 	for _, word in ipairs(reserved_words or {}) do
-		if p == "" or token_match(word, p) then
+		if token_match(word, p) then
 			push_unique(out, seen, word .. " ")
 		end
 	end
@@ -477,7 +477,7 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 			local candidate = field_completion(field.value)
 			if candidate ~= "" then
 				local p = lower_trim(prefix or "")
-				if p == "" or token_match(field.value, p) or token_match(field.display, p) then
+				if token_match(field.value, p) or token_match(field.display, p) then
 					push_unique(items, seen, candidate)
 				end
 			end
@@ -506,10 +506,7 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 		table.insert(operator_words, clause_tokens[idx])
 	end
 
-	local operator_input_words = {}
-	for _, word in ipairs(operator_words) do
-		table.insert(operator_input_words, word)
-	end
+	local operator_input_words = vim.list_extend({}, operator_words)
 	if partial ~= "" then
 		table.insert(operator_input_words, partial)
 	end
@@ -539,15 +536,14 @@ local function complete_cmdline(arglead, cmdline, cursorpos)
 	local has_complete_value = #value_tokens > 0 or (partial ~= "" and looks_like_complete_value(partial))
 
 	if not has_complete_value then
-		local function_prefix = partial ~= "" and partial or ""
 		local fn_items, seen = {}, {}
 		for _, fn in ipairs(functions) do
 			local insert = vim.trim(fn.insert or "")
 			if insert ~= "" and function_matches_field_types(field_meta.types, fn.types) then
 				if
-					function_prefix == ""
-					or token_match(fn.value, lower_trim(function_prefix))
-					or token_match(insert, lower_trim(function_prefix))
+					partial == ""
+					or token_match(fn.value, lower_trim(partial))
+					or token_match(insert, lower_trim(partial))
 				then
 					push_unique(fn_items, seen, insert)
 				end

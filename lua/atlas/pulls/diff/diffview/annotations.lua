@@ -85,14 +85,7 @@ function M.render(view)
 	end
 
 	for side, pane in pairs(panes) do
-		for line in pairs(view.annotations[pane.buf]) do
-			vim.api.nvim_buf_set_extmark(pane.buf, namespace, line - 1, 0, {
-				sign_text = "┃",
-				sign_hl_group = "AtlasLogInfo",
-				number_hl_group = "CursorLineNr",
-				priority = 1100,
-			})
-		end
+		ui.draw_signs(namespace, pane.buf, view.annotations[pane.buf])
 
 		for line, entries in pairs(placed[pane.buf]) do
 			if expanded then
@@ -113,7 +106,7 @@ function M.render(view)
 				end
 			else
 				vim.api.nvim_buf_set_extmark(pane.buf, namespace, line - 1, 0, {
-					virt_text = ui.render_virtual_text(entries, options.format_text),
+					virt_text = ui.render_virtual_text(entries),
 					virt_text_pos = "eol",
 					priority = 1100,
 				})

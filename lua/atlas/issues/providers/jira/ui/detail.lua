@@ -2,6 +2,7 @@
 local M = {}
 
 local icons = require("atlas.ui.shared.icons")
+local highlights = require("atlas.ui.highlights")
 local utils = require("atlas.ui.shared.utils")
 local helper = require("atlas.issues.ui.presentation")
 local spinner = require("atlas.ui.components.spinner")
@@ -110,7 +111,7 @@ function M.chips(issue, details, loading)
 			if field.display == "chip" then
 				table.insert(chips, {
 					label = field.formatted,
-					hl = field.hl_group or "AtlasChipActive",
+					hl = field.hl_group and highlights.chip_from_group(field.hl_group) or "AtlasChipActive",
 				})
 			end
 		end

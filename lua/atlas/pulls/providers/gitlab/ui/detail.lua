@@ -2,6 +2,7 @@
 local M = {}
 
 local header = require("atlas.pulls.ui.components.header")
+local highlights = require("atlas.ui.highlights")
 
 ---@param _pr PullRequest
 ---@param details PullRequestDetails|nil
@@ -45,18 +46,7 @@ function M.chips(_pr, details, loading)
 			if shown >= MAX_LABELS then
 				break
 			end
-			local bg = label.color and label.color:gsub("^#", "") or nil
-			local fg = label.text_color and label.text_color:gsub("^#", "") or nil
-			local hl = "AtlasTabInactive"
-			if bg and bg:match("^%x%x%x%x%x%x$") then
-				if not fg or not fg:match("^%x%x%x%x%x%x$") then
-					fg = "1e1e2e"
-				end
-				hl = "AtlasGLLabel_" .. bg .. "_" .. fg
-				if next(vim.api.nvim_get_hl(0, { name = hl, create = false })) == nil then
-					vim.api.nvim_set_hl(0, hl, { bg = "#" .. bg, fg = "#" .. fg, bold = true })
-				end
-			end
+			local hl = highlights.chip(label.color, { fg = label.text_color })
 			table.insert(chips, { label = name, hl = hl })
 			shown = shown + 1
 		end

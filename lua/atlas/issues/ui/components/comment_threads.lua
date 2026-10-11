@@ -6,24 +6,6 @@ local helper = require("atlas.issues.ui.presentation")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 
----@param author AtlasUser|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.name and author.name ~= "" then
-		return author.name
-	end
-	if author.username and author.username ~= "" then
-		return author.username
-	end
-	if author.id and author.id ~= "" then
-		return author.id
-	end
-	return "Unknown"
-end
-
 ---@param comment IssueComment
 ---@param reaction_options IssueReactionOption[]|nil
 ---@return AtlasThreadItem
@@ -40,7 +22,7 @@ local function comment_item(comment, reaction_options)
 		table.insert(footer_items, { text = reactions, highlights = reaction_highlights })
 	end
 
-	local author = author_name(comment.author)
+	local author = helper.person_name(comment.author)
 	local author_hl = helper.person_hl(author)
 	local user_icon = icons.general("user")
 	return {

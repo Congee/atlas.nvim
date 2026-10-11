@@ -234,8 +234,7 @@ end
 ---@param session AtlasDiffSession
 local function show_details(session)
 	local file = session.view.current_file
-	local by_line = session.view.annotations[vim.api.nvim_get_current_buf()]
-	local items = by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+	local items = annotations.at_cursor(session.view)
 	if not file or not items then
 		vim.lsp.buf.hover()
 		return
@@ -259,8 +258,7 @@ end
 ---@param session AtlasDiffSession
 ---@param action "delete_comment"|"toggle_resolved"
 local function dispatch_annotation(session, action)
-	local by_line = session.view.annotations[vim.api.nvim_get_current_buf()]
-	local items = by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+	local items = annotations.at_cursor(session.view)
 	if not items or #items == 0 then
 		return
 	end
@@ -841,7 +839,7 @@ local function setup_ui(session)
 		end,
 	})
 
-	if not result.options.review_panel.hidden then
+	if result.pr and not result.options.review_panel.hidden then
 		review_panel.open(session.review_panel)
 	end
 	if session.commits.shown and session.explorer.win then

@@ -7,13 +7,14 @@ local utils = require("atlas.ui.shared.utils")
 local M = {}
 
 local PR_ICON, PR_ICON_HL = icons.pulls("pr")
+local DRAFT_PR_ICON, DRAFT_PR_ICON_HL = icons.pulls("draft_pr")
 local MERGED_PR_ICON, MERGED_PR_ICON_HL = icons.pulls("merged_pr")
 local DECLINED_PR_ICON, DECLINED_PR_ICON_HL = icons.pulls("declined_pr")
 local STAR_ICON, STAR_ICON_HL = icons.general("star")
 
 local PR_STATE_ICON = {
 	open = { PR_ICON, PR_ICON_HL },
-	draft = { PR_ICON, "AtlasPRDraft" },
+	draft = { DRAFT_PR_ICON, DRAFT_PR_ICON_HL },
 	merged = { MERGED_PR_ICON, MERGED_PR_ICON_HL },
 	declined = { DECLINED_PR_ICON, DECLINED_PR_ICON_HL },
 }
@@ -73,8 +74,8 @@ local function cell_hl(row, col, ctx, display)
 		return { { start_col = 0, end_col = #ctx.text, hl_group = "AtlasSectionHeader" } }
 	end
 	if col.key == "name" and row.kind == "pr" then
-		local icon_hl = row._pr_icon_hl or "AtlasPROpen"
-		local icon = row._pr_icon_str or PR_ICON
+		local icon_hl = row._pr_icon_hl
+		local icon = row._pr_icon_str
 		local spans = {}
 		if ctx.text:find(icon .. " " .. STAR_ICON .. " ", 1, true) == 1 then
 			table.insert(spans, {

@@ -313,18 +313,11 @@ function M.get_assignee_options(key, on_done)
 			return
 		end
 
-		local function users(connection)
-			local result_users = {}
-			for _, raw in ipairs(json.safe_table(json.safe_table(connection).nodes)) do
-				local user = normalizer.to_user(raw)
-				if user then
-					table.insert(result_users, user)
-				end
-			end
-			return result_users
-		end
-
-		on_done(users(issue.assignees), users(repository.assignableUsers), nil)
+		on_done(
+			normalizer.to_users(json.safe_table(issue.assignees).nodes),
+			normalizer.to_users(json.safe_table(repository.assignableUsers).nodes),
+			nil
+		)
 	end, {
 		action = "Fetch issue assignee options",
 		slug = slug,
@@ -579,31 +572,15 @@ end
 ---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.create_issue(opts, on_done)
-	local slug = tostring(opts.repo_slug or "")
-	if slug == "" then
-		vim.schedule(function()
-			on_done(nil, "Missing repository slug")
-		end)
-		return nil
-	end
-
-	local title = tostring(opts.title or "")
-	if vim.trim(title) == "" then
-		vim.schedule(function()
-			on_done(nil, "Title is required")
-		end)
-		return nil
-	end
-
 	local args = {
 		"issue",
 		"create",
 		"--repo",
-		slug,
+		opts.repo_slug,
 		"--title",
-		title,
+		opts.title,
 		"--body",
-		tostring(opts.body or ""),
+		opts.body or "",
 	}
 
 	for _, label in ipairs(opts.labels or {}) do
@@ -644,7 +621,7 @@ function M.create_issue(opts, on_done)
 		on_done({ number = number, url = url }, nil)
 	end, {
 		action = "Create issue",
-		slug = slug,
+		slug = opts.repo_slug,
 		labels = opts.labels,
 		assignees = opts.assignees,
 		milestone = opts.milestone,
@@ -652,8 +629,8 @@ function M.create_issue(opts, on_done)
 end
 
 ---@param key string
----@param opts { title: string, body: string, labels: string[], assignees: string[], milestone?: integer }
----@param on_done fun(result: GitHubIssueEditorResult|nil, err: string|nil)
+---@param opts { title?: string, body?: string, labels?: string[], assignees?: string[], milestone?: integer|false }
+---@param on_done fun(result: { number: integer|nil, url: string|nil }|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_issue(key, opts, on_done)
 	local slug, number = normalizer.parse_key(key)
@@ -667,19 +644,24 @@ function M.update_issue(key, opts, on_done)
 		"-X",
 		"PATCH",
 		string.format("repos/%s/issues/%d", slug, number),
-		"-f",
-		"title=" .. opts.title,
-		"-f",
-		"body=" .. opts.body,
-		"-F",
-		"milestone=" .. (opts.milestone or "null"),
 	}
+	for _, field in ipairs({ "title", "body" }) do
+		if opts[field] ~= nil then
+			vim.list_extend(args, { "-f", field .. "=" .. opts[field] })
+		end
+	end
+	if opts.milestone ~= nil then
+		vim.list_extend(args, { "-F", "milestone=" .. (opts.milestone == false and "null" or opts.milestone) })
+	end
 	for _, field in ipairs({ "labels", "assignees" }) do
-		if #opts[field] == 0 then
-			vim.list_extend(args, { "-f", field .. "[]" })
-		else
-			for _, value in ipairs(opts[field]) do
-				vim.list_extend(args, { "-f", field .. "[]=" .. value })
+		local values = opts[field]
+		if values ~= nil then
+			if #values == 0 then
+				vim.list_extend(args, { "-f", field .. "[]" })
+			else
+				for _, value in ipairs(values) do
+					vim.list_extend(args, { "-f", field .. "[]=" .. value })
+				end
 			end
 		end
 	end

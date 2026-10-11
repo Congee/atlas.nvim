@@ -68,6 +68,11 @@
 ---@field role "reviewer"|"participant"
 ---@field decision "approved"|"changes_requested"|"reviewed"|"pending"
 
+---@class PullsReviewerCandidate
+---@field label string
+---@field provider_id string
+---@field selected boolean|nil
+
 --------------------------------------------------------------------------------
 -- Merge check
 --------------------------------------------------------------------------------
@@ -130,6 +135,7 @@
 ---@field thread_id string|nil
 ---@field author PullsAuthor|nil
 ---@field content_raw string
+---@field content_display string|nil
 ---@field created_on string
 ---@field resolved_on string|nil
 ---@field resolved_by PullsAuthor|nil
@@ -179,7 +185,6 @@
 ---@field history PullsReviewHistoryEntry[]
 
 ---@class PullsReviewContext
----@field mention_candidates PullsAuthor[]
 ---@field reviewed_files table<string, boolean>|nil
 
 --------------------------------------------------------------------------------

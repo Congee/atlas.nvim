@@ -2,7 +2,7 @@ local M = {}
 
 local config = require("atlas.config")
 local git_checkout = require("atlas.core.git.checkout")
-local live = require("atlas.ui.popups.live")
+local console = require("atlas.ui.console")
 local logger = require("atlas.core.logger")
 local core_notify = require("atlas.core.notify")
 
@@ -34,10 +34,13 @@ local function custom_action(item)
 		id = item.id,
 		label = item.label,
 		icon = item.icon,
+		confirmation = item.confirmation,
 		is_available = has_pr,
 		run = function(context, done)
 			notify(context, "loading", string.format("Running %s...", item.label))
 			local finished = false
+			---@type AtlasConsoleOutput|nil
+			local output
 			local function log_failure(err)
 				local pr = context.pr
 				logger.logerror("Custom pull request action failed", {
@@ -53,6 +56,12 @@ local function custom_action(item)
 					return
 				end
 				finished = true
+				if output then
+					if ok == false and message then
+						output:write(message .. "\n")
+					end
+					output:finish(ok == false and 1 or 0)
+				end
 				vim.schedule(function()
 					if ok == false then
 						local err = message or (item.label .. " failed")
@@ -74,7 +83,16 @@ local function custom_action(item)
 				repo_path = repo_path,
 				pr = pr,
 				user = context.current_user,
-				output = live.create,
+				write = function(text)
+					if finished then
+						return
+					end
+					if not output then
+						output = console.start(item.label, repo_path)
+						console.open()
+					end
+					output:write(text)
+				end,
 			}, complete_custom)
 			if not ok then
 				local message = "Custom action failed: " .. tostring(err)
@@ -134,8 +152,8 @@ M.copy_url = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local url = pr.link and pr.link.html
-		if not url or url == "" then
+		local url = pr.link.html
+		if url == "" then
 			notify(context, "warn", "No URL available")
 			done(nil, "No URL available")
 			return
@@ -153,8 +171,8 @@ M.open_in_browser = {
 	is_available = has_pr,
 	run = function(context, done)
 		local pr = assert(context.pr)
-		local url = pr.link and pr.link.html
-		if not url or url == "" then
+		local url = pr.link.html
+		if url == "" then
 			notify(context, "warn", "No URL available")
 			done(nil, "No URL available")
 			return

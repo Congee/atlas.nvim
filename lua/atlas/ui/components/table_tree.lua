@@ -63,9 +63,6 @@ end
 ---@param row table
 ---@return boolean
 local function is_pass_through_row(row)
-	if row == nil then
-		return true
-	end
 	if row.kind == "separator" then
 		return true
 	end
@@ -80,10 +77,10 @@ end
 ---@return table[]
 local function flatten(rows, tree)
 	local out = {}
-	local root_count = #(rows or {})
+	local root_count = #rows
 
 	local function walk(list, depth)
-		for index, row in ipairs(list or {}) do
+		for index, row in ipairs(list) do
 			local item = vim.tbl_extend("force", row, {
 				_tv2_depth = 0,
 				_tv2_has_children = false,

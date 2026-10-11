@@ -20,9 +20,8 @@ local function item(action_id, map_item)
 		return nil
 	end
 
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param buf integer

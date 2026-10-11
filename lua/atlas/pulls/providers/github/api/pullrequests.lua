@@ -556,8 +556,8 @@ function M.decline(pr, on_done)
 	})
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
@@ -605,10 +605,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				if login ~= "" then
 					local reviewer = {
 						label = "@" .. login,
-						user_id = tostring(raw.id or ""),
 						provider_id = login,
 						selected = false,
-						default = false,
 					}
 					by_login[login] = reviewer
 					table.insert(reviewers, reviewer)
@@ -617,7 +615,7 @@ function M.fetch_reviewer_candidates(opts, on_done)
 		end
 
 		for _, item in ipairs(results.current or {}) do
-			local login = item.role == "reviewer" and tostring(item.nickname or item.username or item.name or "") or ""
+			local login = item.role == "reviewer" and item.username or ""
 			if login ~= "" then
 				local reviewer = by_login[login]
 				if reviewer then
@@ -625,7 +623,6 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				else
 					table.insert(reviewers, {
 						label = "@" .. login,
-						user_id = item.id,
 						provider_id = login,
 						selected = true,
 					})
@@ -638,8 +635,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 end
 
 ---@param pr PullRequest
----@param selected PullsCreatePRReviewer[]
----@param original PullsCreatePRReviewer[]
+---@param selected PullsReviewerCandidate[]
+---@param original PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.update_reviewers(pr, selected, original, on_done)
@@ -708,6 +705,120 @@ function M.update_reviewers(pr, selected, original, on_done)
 		added = #added,
 		removed = #removed,
 	})
+end
+
+---@param pr PullRequest
+---@param selected PullsReviewerCandidate[]
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return AtlasRequestScope
+local function replace_reviewers(pr, selected, on_done)
+	local requests = request_scope.new()
+	requests.run(function(done)
+		return reviews_api.fetch_reviewers(pr, { force_refresh = true }, done)
+	end, function(reviewers, err)
+		if err then
+			on_done(false, err)
+			return
+		end
+
+		local original = {}
+		for _, reviewer in ipairs(reviewers) do
+			if reviewer.role == "reviewer" then
+				original[#original + 1] = { label = reviewer.name, provider_id = reviewer.username }
+			end
+		end
+		requests.run(function(done)
+			return M.update_reviewers(pr, selected, original, done)
+		end, on_done)
+	end)
+	return requests
+end
+
+---@param pr PullRequest
+---@param opts PullsUpdatePROpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return AtlasRequestScope
+function M.update_pr(pr, opts, on_done)
+	local requests = request_scope.new()
+	local updates = {}
+	local context = { action = "Update PR", repo = pr.repo_full_name, number = pr.id }
+	local args = { "pr", "edit", tostring(pr.id), "--repo", pr.repo_full_name }
+	for _, field in ipairs({ "title", "body", "base" }) do
+		if opts[field] ~= nil then
+			args[#args + 1] = "--" .. field
+			args[#args + 1] = opts[field]
+		end
+	end
+	if #args > 5 then
+		updates[#updates + 1] = function(done)
+			return cli.gh(args, function(_, err)
+				if not err then
+					invalidate_details(pr.repo_full_name, pr.id)
+					if opts.body ~= nil then
+						cli.delete_mem(string.format("github:desc:%s:%s", pr.repo_full_name, tostring(pr.id)))
+					end
+				end
+				done(not err, err)
+			end, context)
+		end
+	end
+
+	if opts.labels ~= nil or opts.assignees ~= nil then
+		local fields = { "api", "-X", "PATCH", string.format("repos/%s/issues/%s", pr.repo_full_name, pr.id) }
+		for _, field in ipairs({ "labels", "assignees" }) do
+			local values = opts[field]
+			if field == "assignees" and values then
+				values = vim.tbl_map(function(user)
+					return user.username
+				end, values)
+			end
+			if values then
+				if #values == 0 then
+					fields[#fields + 1] = "-f"
+					fields[#fields + 1] = field .. "[]"
+				end
+				for _, value in ipairs(values) do
+					fields[#fields + 1] = "-f"
+					fields[#fields + 1] = field .. "[]=" .. value
+				end
+			end
+		end
+		updates[#updates + 1] = function(done)
+			return cli.gh(fields, function(_, err)
+				if not err then
+					invalidate_details(pr.repo_full_name, pr.id)
+				end
+				done(not err, err)
+			end, context)
+		end
+	end
+
+	if opts.draft ~= nil and opts.draft ~= (pr.state == "draft") then
+		updates[#updates + 1] = function(done)
+			return M.set_draft(pr, opts.draft, done)
+		end
+	end
+	if opts.reviewers ~= nil then
+		updates[#updates + 1] = function(done)
+			return replace_reviewers(pr, opts.reviewers, done)
+		end
+	end
+
+	local function update_next(index)
+		if not updates[index] then
+			on_done(true, nil)
+			return
+		end
+		requests.run(updates[index], function(ok, err)
+			if not ok then
+				on_done(false, err)
+				return
+			end
+			update_next(index + 1)
+		end)
+	end
+	update_next(1)
+	return requests
 end
 
 ---@param opts PullsCreatePROpts

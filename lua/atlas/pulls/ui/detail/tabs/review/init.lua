@@ -12,22 +12,6 @@ local conversation = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local utils = require("atlas.ui.shared.utils")
 
 ---@param pr PullRequest
----@return (fun(text: string): string)|nil
-local function comment_formatter(pr)
-	local provider = detail.provider
-	local comments = provider and provider.capabilities.comments
-	if not comments or not comments.comment_formatter then
-		return nil
-	end
-	return comments.comment_formatter({
-		pr = pr,
-		details = detail.current_details,
-		data = state.data,
-		conversation = conversation.comments(),
-	})
-end
-
----@param pr PullRequest
 ---@return boolean
 local function is_current(pr)
 	return state.current_pr ~= nil
@@ -82,16 +66,16 @@ function M.on_select(pr, refresh, opts)
 	end)
 end
 
----@param pr PullRequest
+---@param _pr PullRequest
 ---@param _details PullRequestDetails|nil
 ---@param width integer
 ---@return string[], table[], table<integer, table>|nil
-function M.render(pr, _details, width)
+function M.render(_pr, _details, width)
 	if state.status then
 		return renderer.render(width, state.status, nil)
 	end
 	local data = state.data
-	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil, comment_formatter(pr))
+	return renderer.render(width, data and data.comments or nil, data and data.tasks or nil)
 end
 
 ---@param _lnum integer
@@ -124,17 +108,11 @@ end
 ---@param buf integer
 function M.show_details(entry, buf)
 	local task = entry and entry.entity_kind == "task" and entry.comment or nil
-	local pr = detail.current_pr
-	if not task or not pr then
+	if not task then
 		return
 	end
 
-	local content = task.content_raw or ""
-	local format_text = comment_formatter(pr)
-	if format_text then
-		content = format_text(content)
-	end
-	content = utils.task_text(content)
+	local content = utils.task_text(task.content_display or task.content_raw or "")
 	local empty = string.format("(empty %s)", (task.task_label or "task"):lower())
 	local lines = vim.split(content ~= "" and content or empty, "\n", { plain = true })
 	lines[1] = (task.state == "RESOLVED" and "[x] " or "[ ] ") .. lines[1]
@@ -182,7 +160,6 @@ local function action_context(pr)
 		provider = provider,
 		pr = pr,
 		data = data,
-		details = detail.current_details,
 		conversation = conversation.comments(),
 		notify = function(level, message, duration)
 			if is_current(pr) then
@@ -196,10 +173,9 @@ end
 
 ---@param action "add_comment"|"edit_comment"|"delete_comment"|"toggle_task"|"toggle_resolved"
 ---@param pr PullRequest
----@param entry table
+---@param comment PullsComment|nil
 ---@param refresh fun()
-local function run_comment_action(action, pr, entry, refresh)
-	local comment = entry and entry.comment
+local function run_comment_action(action, pr, comment, refresh)
 	if not comment then
 		return
 	end
@@ -229,21 +205,21 @@ end
 ---@param entry table
 ---@param refresh fun()
 function M.reply_comment(pr, entry, refresh)
-	run_comment_action("add_comment", pr, entry, refresh)
+	run_comment_action("add_comment", pr, entry and entry.comment, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.edit_comment(pr, entry, refresh)
-	run_comment_action("edit_comment", pr, entry, refresh)
+	run_comment_action("edit_comment", pr, entry and entry.comment, refresh)
 end
 
 ---@param pr PullRequest
 ---@param entry table
 ---@param refresh fun()
 function M.delete_comment(pr, entry, refresh)
-	run_comment_action("delete_comment", pr, entry, refresh)
+	run_comment_action("delete_comment", pr, entry and entry.comment, refresh)
 end
 
 ---@param pr PullRequest
@@ -253,7 +229,7 @@ function M.toggle_resolved(pr, entry, refresh)
 	local comment = entry and entry.comment
 	local action = comment and comment.is_task and "toggle_task" or "toggle_resolved"
 	local target = action == "toggle_resolved" and entry and entry.thread_root or comment
-	run_comment_action(action, pr, { comment = target }, refresh)
+	run_comment_action(action, pr, target, refresh)
 end
 
 ---@param pr PullRequest

@@ -27,10 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 
 local M = {}
 
----@param pane PullsPipelinesLogs
-function M.render(pane)
-	renderer.render(pane)
-end
+M.render = renderer.render
 
 ---@param entries (PullsLogLine|PullsLogGroup)[]
 ---@param prefix string

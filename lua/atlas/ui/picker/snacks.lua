@@ -134,6 +134,16 @@ function M.open(request)
 		live = request.fetch ~= nil,
 		show_empty = true,
 		win = { input = { b = { completion = false } } },
+		layout = {
+			layout = {
+				width = request.size.width,
+				height = request.size.height,
+				min_width = 0,
+				max_width = math.huge,
+				min_height = 0,
+				max_height = math.huge,
+			},
+		},
 		finder = picker_finder,
 		format = function(item)
 			return item.chunks
@@ -171,7 +181,8 @@ function M.open(request)
 		end,
 	}
 	if not request.preview_item then
-		opts.layout = { preset = "select", preview = false }
+		opts.layout.preset = "select"
+		opts.layout.preview = false
 	end
 
 	if request.multi then

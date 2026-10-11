@@ -17,18 +17,16 @@ local function status_value(kind, label)
 end
 
 local function generic_rows(pr)
-	local state = tostring(pr.state or "-")
+	local state = pr.state
 	local author = presentation.user_handle(pr.author)
-	local repo = tostring(pr.repo_full_name or "")
-	local branch = tostring((pr.source or {}).branch or "?")
-		.. " → "
-		.. tostring((pr.destination or {}).branch or "?")
+	local repo = pr.repo_full_name
+	local branch = pr.source.branch .. " → " .. pr.destination.branch
 	return {
 		{ "State", state, presentation.pr_state_hl(state) },
 		{ "Author", author, presentation.author_hl(author) },
 		{ "Repo", repo ~= "" and repo or "-", repo ~= "" and presentation.repo_hl(repo) or "AtlasTextMuted" },
 		{ "Branch", branch, "AtlasTextMuted" },
-		{ "Comments", tostring(pr.comments_count or 0), "AtlasTextMuted" },
+		{ "Comments", tostring(pr.comments_count), "AtlasTextMuted" },
 		{ "Created", utils.relative_time(pr.created_on), "AtlasTextMuted" },
 		{ "Updated", utils.relative_time(pr.updated_on), "AtlasTextMuted" },
 	}
@@ -106,10 +104,10 @@ local provider_rows = {
 }
 
 local function render(pr, rows)
-	local id = tostring(pr.id or "")
+	local id = tostring(pr.id)
 	local marker = pr.provider == "gitlab" and "!" or "#"
 
-	local lines = { string.format(" %s%s: %s", marker, id, tostring(pr.title or "")), "" }
+	local lines = { string.format(" %s%s: %s", marker, id, pr.title), "" }
 	---@type AtlasUIHighlight[]
 	local highlights = {}
 	if id ~= "" then

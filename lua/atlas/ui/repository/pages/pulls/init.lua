@@ -27,7 +27,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field group integer
----@field keymaps table<integer, AtlasHelpKeyItem[]>
+---@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
 
 local M = { key = "pulls", label = "Pull Requests", icon = icons.pulls("pr") }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.pulls")
@@ -184,10 +184,11 @@ end
 ---@param buf integer
 ---@param actions table[]
 local function register(state, buf, actions)
-	local items = {}
+	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
 		local keys = action.key
 		if keys and #keys > 0 then
+			local items = groups[action.group or "General"]
 			items[#items + 1] = {
 				key = keys,
 				desc = action.desc,
@@ -197,8 +198,9 @@ local function register(state, buf, actions)
 			}
 		end
 	end
-	state.keymaps[buf] = items
-	help.register("Pull Requests", items, { buffer = buf })
+	state.keymaps[buf] = groups
+	help.register("General", groups.General, { buffer = buf, index = 1 })
+	help.register("Filters", groups.Filters, { buffer = buf, index = 2 })
 end
 
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
@@ -240,15 +242,16 @@ function M.open(opts)
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state, true)
 			end,
-			index = 25,
+			index = 80,
 		},
 		{
 			key = resolver.resolve("ui.search"),
 			desc = "Search this page",
+			group = "Filters",
 			callback = function()
 				search(state)
 			end,
-			index = 20,
+			index = 1,
 		},
 		{
 			key = resolver.resolve("ui.next_page"),
@@ -261,7 +264,7 @@ function M.open(opts)
 				state.cursors[state.page] = state.next_cursor
 				load(state)
 			end,
-			index = 11,
+			index = 16,
 		},
 		{
 			key = resolver.resolve("ui.previous_page"),
@@ -272,19 +275,20 @@ function M.open(opts)
 					load(state)
 				end
 			end,
-			index = 10,
+			index = 15,
 		},
 	}
 	for index, filter in ipairs(filters) do
 		actions[#actions + 1] = {
 			key = resolver.resolve("pulls.filters." .. filter),
 			desc = "Show " .. filter .. " pull requests",
+			group = "Filters",
 			callback = function()
 				state.filter = filter
 				state.page, state.cursors, state.next_cursor = 1, {}, nil
 				load(state)
 			end,
-			index = 20 + index,
+			index = 10 + index,
 		}
 	end
 	register(state, state.sidebar_buf, actions)
@@ -306,7 +310,7 @@ function M.open(opts)
 					end)
 				end
 			end,
-			index = 31,
+			index = 2,
 		},
 		{
 			key = panel_keys,
@@ -317,7 +321,7 @@ function M.open(opts)
 					opener.open(pr.link.html)
 				end
 			end,
-			index = 30,
+			index = 1,
 		},
 		{
 			key = resolver.resolve("ui.open_in_browser"),
@@ -328,7 +332,7 @@ function M.open(opts)
 					vim.ui.open(pr.link.html)
 				end
 			end,
-			index = 33,
+			index = 4,
 		},
 	})
 	register(state, state.buf, actions)
@@ -354,8 +358,10 @@ function M.close(buf)
 	state.spinner:stop()
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
-	for buffer, items in pairs(state.keymaps) do
-		help.remove("Pull Requests", items, { buffer = buffer })
+	for buffer, groups in pairs(state.keymaps) do
+		for group, items in pairs(groups) do
+			help.remove(group, items, { buffer = buffer })
+		end
 	end
 	if utils.window.valid(state.win) then
 		vim.wo[state.win].cursorline = false

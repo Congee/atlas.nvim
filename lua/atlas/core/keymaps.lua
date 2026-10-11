@@ -123,8 +123,7 @@ local config = require("atlas.config")
 ---@field open_diff? AtlasKeymapValue
 ---@field checkout? AtlasKeymapValue
 ---@field open_repository? AtlasKeymapValue
----@field edit_title? AtlasKeymapValue
----@field edit_description? AtlasKeymapValue
+---@field edit_pr? AtlasKeymapValue
 ---@field pipelines? AtlasPullsPipelinesKeymaps
 ---@field review? AtlasPullsReviewKeymaps
 ---@field filters? AtlasPullsFilterKeymaps
@@ -195,8 +194,7 @@ local config = require("atlas.config")
 ---| "pulls.open_diff"
 ---| "pulls.checkout"
 ---| "pulls.open_repository"
----| "pulls.edit_title"
----| "pulls.edit_description"
+---| "pulls.edit_pr"
 ---| "pulls.pipelines.next_job"
 ---| "pulls.pipelines.previous_job"
 ---| "pulls.pipelines.show_history"
@@ -312,53 +310,6 @@ function M.custom_items(domain, run)
 	return items
 end
 
----@param section_path string[]
----@param default_bookmarks_key string
----@return table<string, string[]>
-local function view_key_conflicts(section_path, default_bookmarks_key)
-	local node = require("atlas.config").options ---@type any
-	for _, key in ipairs(section_path) do
-		if type(node) ~= "table" then
-			return {}
-		end
-		node = node[key]
-	end
-	if type(node) ~= "table" then
-		return {}
-	end
-
-	---@type table<string, table<string, true>>
-	local seen = {}
-	for _, view in ipairs(node.views or {}) do
-		local key = type(view) == "table" and view.key or nil
-		if type(key) == "string" and key ~= "" then
-			seen[key] = seen[key] or {}
-			seen[key][tostring(view.name or "<view>")] = true
-		end
-	end
-
-	local bookmarks = node.bookmarks
-	if default_bookmarks_key ~= "" then
-		local bk = tostring((type(bookmarks) == "table" and bookmarks.key) or default_bookmarks_key)
-		if bk ~= "" then
-			seen[bk] = seen[bk] or {}
-			seen[bk][tostring((type(bookmarks) == "table" and bookmarks.label) or default_bookmarks_key) .. " (bookmarks)"] =
-				true
-		end
-	end
-
-	---@type table<string, string[]>
-	local conflicts = {}
-	for key, names in pairs(seen) do
-		local list = vim.tbl_keys(names)
-		table.sort(list)
-		if #list > 1 then
-			conflicts[key] = list
-		end
-	end
-	return conflicts
-end
-
 ---@return table<string, table<string, string[]>>
 function M.validate()
 	-- TODO: Give these actions unique default mappings.
@@ -415,6 +366,7 @@ function M.validate()
 	end
 
 	local keymaps = config.options.keymaps
+	---@cast keymaps -nil
 	local function actions_for(namespaces)
 		local action_ids = {}
 		for _, namespace in ipairs(namespaces) do
@@ -462,16 +414,6 @@ function M.validate()
 			"ui.close",
 		}),
 	}
-
-	for _, domain in ipairs({ "issues", "pulls" }) do
-		for _, provider in ipairs(require("atlas.providers").list(domain)) do
-			local provider_domain = provider.domains[domain]
-			local conflicts = view_key_conflicts({ domain, provider.id }, provider_domain.bookmark_key or "S")
-			if next(conflicts) ~= nil then
-				result[string.format("%s %s views", provider.name:lower(), domain)] = conflicts
-			end
-		end
-	end
 
 	return result
 end

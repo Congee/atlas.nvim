@@ -3,6 +3,8 @@
 
 local M = {}
 
+local utils = require("atlas.core.utils")
+
 ---@class BitbucketRepoTarget
 ---@field workspace string
 ---@field repo string
@@ -52,25 +54,7 @@ end
 ---@return BitbucketParsedSearch|nil, string|nil
 local function parse(input)
 	local input_value = vim.trim(input or "")
-	local tokens, current = {}, {}
-	local quoted = false
-	for i = 1, #input_value do
-		local char = input_value:sub(i, i)
-		if char == '"' then
-			quoted = not quoted
-			table.insert(current, char)
-		elseif char:match("%s") and not quoted then
-			if #current > 0 then
-				table.insert(tokens, table.concat(current))
-				current = {}
-			end
-		else
-			table.insert(current, char)
-		end
-	end
-	if #current > 0 then
-		table.insert(tokens, table.concat(current))
-	end
+	local tokens = utils.split_tokens(input_value)
 
 	local targets, query_tokens, seen = {}, {}, {}
 	for _, token in ipairs(tokens) do

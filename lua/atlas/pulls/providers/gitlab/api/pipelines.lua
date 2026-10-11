@@ -526,8 +526,7 @@ function M.fetch_commit_status(commit, opts, on_done)
 		end
 	end
 
-	local endpoint =
-		string.format("/projects/%s/repository/commits/%s/statuses?per_page=100", service.url_encode(path), commit.hash)
+	local endpoint = string.format("/projects/%s/repository/commits/%s/statuses", service.url_encode(path), commit.hash)
 	return service.fetch_all_pages(endpoint, function(result, err)
 		if err then
 			on_done(nil, nil, err)

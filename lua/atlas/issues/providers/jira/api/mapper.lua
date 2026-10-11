@@ -195,7 +195,9 @@ function M.to_issue_details(raw, project_config)
 	end
 	---@type JiraIssueDetails
 	local details = {
+		title = json.safe_str(fields.summary),
 		description = extract_description(fields.description),
+		type = M.to_issue_type(safe_get(fields, "issuetype")),
 		status = status,
 		priority = safe_get(fields, "priority", "name"),
 		reporter = normalize_issue_user(safe_get(fields, "reporter")),

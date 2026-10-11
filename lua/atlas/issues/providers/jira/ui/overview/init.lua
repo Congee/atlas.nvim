@@ -46,7 +46,7 @@ end
 function M.activate(buf, refresh)
 	local keys = keymaps.resolve("ui.toggle_description_mode")
 	if keys then
-		help.register("Panel", {
+		help.register("Detail", {
 			{
 				key = #keys == 1 and keys[1] or keys,
 				desc = "Toggle description mode",
@@ -57,7 +57,7 @@ function M.activate(buf, refresh)
 					refresh()
 				end,
 			},
-		}, { index = 212, buffer = buf })
+		}, { index = 2, buffer = buf })
 	end
 end
 
@@ -65,7 +65,7 @@ end
 function M.deactivate(buf)
 	local keys = keymaps.resolve("ui.toggle_description_mode")
 	if keys then
-		help.remove("Panel", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
+		help.remove("Detail", { { key = #keys == 1 and keys[1] or keys } }, { buffer = buf })
 	end
 end
 

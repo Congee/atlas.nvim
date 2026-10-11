@@ -205,24 +205,24 @@ M.register({
 		return complete_options(arglead, { "pr", "issue" })
 	end,
 	run = function(args)
-		local function start(kind)
+		local function open(kind)
 			if kind == "pr" then
-				require("atlas.pulls.create.pr").start()
+				require("atlas.pulls.editor").open()
 			elseif kind == "issue" then
-				require("atlas.issues.create").start()
+				require("atlas.issues.create").open()
 			else
 				notify.error("Usage: :Atlas create <pr|issue>", { vim_notify = true })
 			end
 		end
 
 		if args[1] then
-			start(args[1]:lower())
+			open(args[1]:lower())
 		else
 			picker.select({
 				title = "Create:",
 				items = { "pr", "issue" },
 				size = { width = 0.35, height = 0.15 },
-				on_select = start,
+				on_select = open,
 			})
 		end
 	end,
@@ -346,6 +346,14 @@ M.register({
 })
 
 M.register({
+	name = "console",
+	description = "Open the latest command output",
+	run = function()
+		require("atlas.ui.console").open()
+	end,
+})
+
+M.register({
 	name = "logs",
 	description = "Open Atlas logs",
 	run = function()
@@ -379,8 +387,7 @@ local function pick_command()
 			end
 		elseif command.name == "search" then
 			for _, provider_id in ipairs(assert(command.complete)("")) do
-				local provider = providers[provider_id]
-				add(command, { provider_id }, "Search " .. (provider and provider.name or provider_id))
+				add(command, { provider_id }, "Search " .. providers[provider_id].name)
 			end
 		elseif command.name == "create" then
 			add(command, { "pr" }, "Create a pull request")

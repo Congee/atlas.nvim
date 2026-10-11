@@ -48,22 +48,9 @@ local function check_https_url(url, label)
 	end
 end
 
----@param views any
----@param label string
-local function check_views(views, label)
-	if type(views) ~= "table" or #views == 0 then
-		vim.health.warn(string.format("%s: no views configured", label))
-	else
-		vim.health.ok(string.format("%s: %d view(s) configured", label, #views))
-	end
-end
-
 ---@param id AtlasProviderId
 local function check_provider_views(id)
 	local provider = providers[id]
-	if not provider then
-		return
-	end
 
 	for _, domain in ipairs({ "pulls", "issues" }) do
 		if provider.domains[domain] then
@@ -72,22 +59,19 @@ local function check_provider_views(id)
 			local label = string.format("%s %s", provider.name, domain)
 			if #views == 0 then
 				vim.health.ok(string.format("%s: using default views", label))
+			elseif type(views) ~= "table" then
+				vim.health.warn(string.format("%s: no views configured", label))
 			else
-				check_views(views, label)
+				vim.health.ok(string.format("%s: %d view(s) configured", label, #views))
 			end
 		end
 	end
 end
 
 local function check_pulls()
-	local pulls = config.options and config.options.pulls or nil
-	if not pulls then
-		vim.health.info("Pulls not configured")
-		return
-	end
-
+	local pulls = config.options.pulls
 	local diff_cmd = config.diff_command()
-	local configured = vim.trim((pulls.diff or {}).open_cmd or "auto")
+	local configured = vim.trim(pulls.diff.open_cmd or "auto")
 	local automatic = configured == "auto" or configured == ""
 	vim.health.ok(string.format("Diff viewer: %s%s", diff_cmd, automatic and " (auto)" or ""))
 
@@ -108,7 +92,7 @@ local function check_pulls()
 		)
 	end
 
-	local lsp = (pulls.diff or {}).lsp or {}
+	local lsp = pulls.diff.lsp
 	local lsp_ok, lsp_err = require("atlas.core.git.worktree").validate(lsp)
 	if not lsp_ok then
 		vim.health.error(string.format("pulls.diff.lsp is invalid: %s", tostring(lsp_err)))
@@ -251,8 +235,65 @@ local function check_codediff_keymaps()
 	end
 end
 
+---@param section_path string[]
+---@param default_bookmarks_key string
+---@return table<string, string[]>
+local function view_key_conflicts(section_path, default_bookmarks_key)
+	local node = config.options ---@type any
+	for _, key in ipairs(section_path) do
+		if type(node) ~= "table" then
+			return {}
+		end
+		node = node[key]
+	end
+	if type(node) ~= "table" then
+		return {}
+	end
+
+	---@type table<string, table<string, true>>
+	local seen = {}
+	for _, view in ipairs(node.views or {}) do
+		local key = type(view) == "table" and view.key or nil
+		if type(key) == "string" and key ~= "" then
+			seen[key] = seen[key] or {}
+			seen[key][tostring(view.name or "<view>")] = true
+		end
+	end
+
+	local bookmarks = node.bookmarks
+	if default_bookmarks_key ~= "" then
+		local bk = tostring((type(bookmarks) == "table" and bookmarks.key) or default_bookmarks_key)
+		if bk ~= "" then
+			seen[bk] = seen[bk] or {}
+			seen[bk][tostring((type(bookmarks) == "table" and bookmarks.label) or default_bookmarks_key) .. " (bookmarks)"] =
+				true
+		end
+	end
+
+	---@type table<string, string[]>
+	local conflicts = {}
+	for key, names in pairs(seen) do
+		local list = vim.tbl_keys(names)
+		table.sort(list)
+		if #list > 1 then
+			conflicts[key] = list
+		end
+	end
+	return conflicts
+end
+
 local function validate_keymaps()
 	local by_context = keymaps.validate()
+	for _, domain in ipairs({ "issues", "pulls" }) do
+		for _, provider in ipairs(providers.list(domain)) do
+			local provider_domain = provider.domains[domain]
+			local conflicts = view_key_conflicts({ domain, provider.id }, provider_domain.bookmark_key or "S")
+			if next(conflicts) ~= nil then
+				by_context[string.format("%s %s views", provider.name:lower(), domain)] = conflicts
+			end
+		end
+	end
+
 	local context_names = vim.tbl_keys(by_context)
 	table.sort(context_names)
 

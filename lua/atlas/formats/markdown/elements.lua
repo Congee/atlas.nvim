@@ -1,7 +1,7 @@
 local code_preview = require("atlas.ui.components.code_preview")
 local highlight_groups = require("atlas.formats.markdown.highlights").groups
 local html = require("atlas.formats.markdown.html")
-local highlights = require("atlas.ui.shared.highlights")
+local highlights = require("atlas.ui.highlights")
 local icons = require("atlas.ui.shared.icons")
 local utils = require("atlas.ui.shared.utils")
 

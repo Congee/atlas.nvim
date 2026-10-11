@@ -132,6 +132,14 @@ _G.vim = {
 		end,
 	},
 
+	tbl_map = function(fn, values)
+		local out = {}
+		for key, value in pairs(values) do
+			out[key] = fn(value)
+		end
+		return out
+	end,
+
 	tbl_extend = function(behavior, ...)
 		assert(
 			behavior == "keep" or behavior == "force" or behavior == "error",

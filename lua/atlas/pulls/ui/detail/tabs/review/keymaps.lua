@@ -3,6 +3,17 @@ local M = {}
 local help = require("atlas.ui.popups.help")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
+local detail = require("atlas.pulls.ui.detail.state")
+local state = require("atlas.pulls.ui.detail.tabs.review.state")
+
+local function cursor_entry()
+	local win = detail.win
+	if win == nil or not vim.api.nvim_win_is_valid(win) then
+		return nil
+	end
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	return detail.line_map[lnum]
+end
 
 ---@param action_id AtlasKeymapActionId|string
 ---@param map_item table
@@ -12,29 +23,35 @@ local function from_action(action_id, map_item)
 	if keys == nil then
 		return nil
 	end
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
+end
+
+---@param step 1|-1
+local function jump_hunk(step)
+	local win = detail.win
+	if win == nil or not vim.api.nvim_win_is_valid(win) then
+		return
+	end
+	local lnum = vim.api.nvim_win_get_cursor(win)[1]
+	local last = step > 0 and vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)) or 1
+	for ln = lnum + step, last, step do
+		local entry = detail.line_map[ln]
+		if entry and entry.hunk_start then
+			vim.api.nvim_win_set_cursor(win, { ln, 0 })
+			return
+		end
+	end
 end
 
 ---@param buf integer
 ---@param refresh fun()
 function M.setup(buf, refresh)
 	local tab = require("atlas.pulls.ui.detail.tabs.review")
-	local detail = require("atlas.pulls.ui.detail.state")
 	local provider = detail.provider
 	local tasks = provider and provider.capabilities.tasks
 	local edit_description = tasks and tasks.edit_task and "Edit comment / task" or "Edit comment"
 	local delete_description = tasks and tasks.delete_task and "Delete comment / task" or "Delete comment"
-
-	local function cursor_entry()
-		local win = detail.win
-		if win == nil or not vim.api.nvim_win_is_valid(win) then
-			return nil
-		end
-		local lnum = vim.api.nvim_win_get_cursor(win)[1]
-		return detail.line_map[lnum]
-	end
 
 	local items = {}
 	utils.insert_if(
@@ -132,19 +149,15 @@ function M.setup(buf, refresh)
 			index = 12,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local state = require("atlas.pulls.ui.detail.tabs.review.state")
 				local entry = cursor_entry()
 				if entry == nil then
 					return
 				end
 
 				local entity = entry.entity_kind
-				if entity == "comment" or entity == "task" then
-					local roots = entry.thread_roots or (entry.thread_root and { entry.thread_root }) or {}
-					if state.toggle_threads(roots) then
-						refresh()
-						return
-					end
+				local root = entry.thread_root
+				if root and (entity == "comment" or entity == "task") and state.toggle_threads({ root }) then
+					refresh()
 				end
 			end,
 		})
@@ -156,7 +169,6 @@ function M.setup(buf, refresh)
 			index = 13,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local state = require("atlas.pulls.ui.detail.tabs.review.state")
 				local data = state.data
 				if not data then
 					return
@@ -174,20 +186,7 @@ function M.setup(buf, refresh)
 			index = 11,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local win = detail.win
-				if win == nil or not vim.api.nvim_win_is_valid(win) then
-					return
-				end
-				local map = detail.line_map
-				local lnum = vim.api.nvim_win_get_cursor(win)[1]
-				local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-				for ln = lnum + 1, last do
-					local e = map[ln]
-					if e and e.hunk_start then
-						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
-						return
-					end
-				end
+				jump_hunk(1)
 			end,
 		})
 	)
@@ -198,24 +197,12 @@ function M.setup(buf, refresh)
 			index = 10,
 			opts = { nowait = true, silent = true },
 			callback = function()
-				local win = detail.win
-				if win == nil or not vim.api.nvim_win_is_valid(win) then
-					return
-				end
-				local map = detail.line_map
-				local lnum = vim.api.nvim_win_get_cursor(win)[1]
-				for ln = lnum - 1, 1, -1 do
-					local e = map[ln]
-					if e and e.hunk_start then
-						pcall(vim.api.nvim_win_set_cursor, win, { ln, 0 })
-						return
-					end
-				end
+				jump_hunk(-1)
 			end,
 		})
 	)
 
-	help.register("Detail", items, { index = 212, buffer = buf })
+	help.register("Detail", items, { index = 2, buffer = buf })
 end
 
 ---@param action_id AtlasKeymapActionId|string

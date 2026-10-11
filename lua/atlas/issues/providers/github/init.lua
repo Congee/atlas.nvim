@@ -14,13 +14,10 @@
 ---@field milestone GitHubIssueMilestone|nil
 ---@field sub_issues GitHubIssue[]
 
-local mentions = require("atlas.providers.github.mentions")
 local comments_api = require("atlas.issues.providers.github.api.comments")
 local config = require("atlas.config")
-local client = require("atlas.providers.github.client")
 local emojis = require("atlas.ui.shared.emojis")
 local git = require("atlas.core.git")
-local issue_cache = require("atlas.issues.providers.github.api.cache")
 local issues_api = require("atlas.issues.providers.github.api.issues")
 local links_api = require("atlas.providers.github.links")
 local request_scope = require("atlas.core.requests")
@@ -111,41 +108,6 @@ local function fetch_issue(ref, opts, on_done)
 end
 
 ---@param issue Issue
----@param content string
----@param on_done fun(ok: boolean, err: string|nil)
----@return { cancel: fun() }|nil
-local function update_description(issue, content, on_done)
-	---@cast issue GitHubIssue
-	local slug = issue.repo_full_name
-	local number = issue.number
-	if slug == "" then
-		on_done(false, "Invalid issue")
-		return nil
-	end
-
-	return client.gh({
-		"issue",
-		"edit",
-		tostring(number),
-		"--repo",
-		slug,
-		"--body",
-		content,
-	}, function(_, err)
-		if err then
-			on_done(false, err)
-			return
-		end
-		issue_cache.invalidate(issue.key)
-		on_done(true, nil)
-	end, {
-		action = "Update issue description",
-		slug = slug,
-		number = number,
-	})
-end
-
----@param issue Issue
 ---@param opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
@@ -158,19 +120,19 @@ local function fetch_conversation(issue, opts, on_done)
 		end
 
 		local items = {}
-		for _, comment in ipairs(result.comments or {}) do
+		for _, comment in ipairs(result.comments) do
 			table.insert(items, {
-				id = "comment:" .. tostring(comment.id),
+				id = "comment:" .. comment.id,
 				kind = "comment",
-				created_at = comment.created or "",
+				created_at = comment.created,
 				entity = comment,
 			})
 		end
-		for index, entry in ipairs(result.events or {}) do
+		for index, entry in ipairs(result.events) do
 			table.insert(items, {
-				id = table.concat({ "activity", entry.date or "", index }, ":"),
+				id = table.concat({ "activity", entry.date, index }, ":"),
 				kind = "activity",
-				created_at = entry.date or "",
+				created_at = entry.date,
 				entity = entry,
 			})
 		end
@@ -225,16 +187,15 @@ return {
 	view_for_target = view_for_target,
 	issue_ref = issue_ref,
 	capabilities = {
+		actions = require("atlas.issues.providers.github.actions.registry"),
 		core = {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = issues_api.fetch_by_refs,
 			fetch_issue = fetch_issue,
 			fetch_links = links_api.fetch_issue,
-			update_description = update_description,
 		},
 		comments = {
 			reaction_options = emojis.github(),
-			comment_completion = mentions.for_issues,
 			-- fetch_activity = nil,
 			fetch_conversation = fetch_conversation,
 			add_comment = comments_api.add,

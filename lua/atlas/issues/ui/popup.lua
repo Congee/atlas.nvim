@@ -29,16 +29,16 @@ local function generic_rows(issue)
 	local parent_key = parent and tostring(parent.key or "") or ""
 	if parent_key ~= "" then
 		local parent_title = tostring(parent.title or "")
-		local value = parent_title ~= "" and (parent_key .. " — " .. parent_title) or parent_key
+		local value = parent_title ~= "" and (parent_key .. " - " .. parent_title) or parent_key
 		add(rows, "Parent", value, helper.issue_hl(parent_key))
 	end
 	if issue.comment_count ~= nil then
 		add(rows, "Comments", tostring(issue.comment_count))
 	end
-	if type(issue.created_at) == "string" and issue.created_at ~= "" then
+	if issue.created_at and issue.created_at ~= "" then
 		add(rows, "Created", utils.relative_time(issue.created_at))
 	end
-	if type(issue.updated_at) == "string" and issue.updated_at ~= "" then
+	if issue.updated_at and issue.updated_at ~= "" then
 		add(rows, "Updated", utils.relative_time(issue.updated_at))
 	end
 
@@ -75,8 +75,8 @@ local provider_rows = {
 }
 
 local function render(issue, rows)
-	local key = tostring(issue.key or "")
-	local title = tostring(issue.title or "")
+	local key = issue.key
+	local title = issue.title
 	local lines = { string.format(" %s: %s", key, title), "" }
 	local highlights = {
 		{ line = 0, start_col = 1, end_col = 1 + #key, hl_group = helper.issue_hl(key) },
@@ -86,7 +86,7 @@ local function render(issue, rows)
 			line = 0,
 			start_col = 3 + #key,
 			end_col = #lines[1],
-			hl_group = helper.issue_title_hl(),
+			hl_group = "Normal",
 		}
 	end
 

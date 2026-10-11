@@ -6,7 +6,6 @@ local notify = require("atlas.core.notify")
 local review = require("atlas.pulls.actions.review")
 local state = require("atlas.pulls.ui.detail.tabs.conversation.state")
 local detail = require("atlas.pulls.ui.detail.state")
-local overview = require("atlas.pulls.ui.detail.tabs.overview.state")
 
 ---@param pr PullRequest
 ---@param comment PullsComment|nil
@@ -17,15 +16,12 @@ local function action_context(pr, comment)
 		return nil
 	end
 	local items = state.comments(comment and comment.is_task == true or false)
-	local reviewers = type(overview.reviewers) == "table" and overview.reviewers or nil
 	return {
 		provider = provider,
 		pr = pr,
 		comment = comment,
 		items = items,
-		details = detail.current_details,
 		conversation = state.comments(),
-		reviewers = reviewers,
 		upsert_comment = function(created)
 			if state.is_current(pr) then
 				state.upsert_comment(created)

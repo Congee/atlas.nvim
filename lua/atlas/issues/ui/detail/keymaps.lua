@@ -1,6 +1,7 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local detail_ui = require("atlas.ui.detail")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local actions = require("atlas.issues.actions")
@@ -8,13 +9,20 @@ local state = require("atlas.issues.ui.detail.state")
 local links = require("atlas.ui.links")
 local registrations = {}
 
----@return IssuesDetailTabModule|nil
-local function current_tab_mod()
-	for _, tab in ipairs(state.tabs) do
-		if tab.key == state.current_tab then
-			return tab.mod
-		end
+---@param lnum integer
+---@return boolean
+local function is_selectable(lnum)
+	local entry = state.line_map[lnum]
+	if entry == nil then
+		return false
 	end
+
+	local tab_mod = state.tab_module(state.current_tab)
+	if tab_mod and tab_mod.is_selectable_line then
+		return tab_mod.is_selectable_line(lnum, entry)
+	end
+
+	return true
 end
 
 ---@return boolean
@@ -31,7 +39,7 @@ local function open_current_line()
 		return false
 	end
 
-	local tab = current_tab_mod()
+	local tab = state.tab_module(state.current_tab)
 	if tab and tab.on_enter then
 		return tab.on_enter(issue, entry) == true
 	end
@@ -54,7 +62,7 @@ local function complete_action(issue, on_update, result)
 	if result.removed then
 		detail.close()
 	else
-		detail.refresh()
+		detail.refresh(issue)
 	end
 end
 
@@ -66,15 +74,14 @@ local function item(action_id, map_item)
 	if keys == nil then
 		return nil
 	end
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param buf integer
 function M.register(buf)
+	M.remove(buf)
 	local items = {}
-	local nav = require("atlas.issues.ui.detail.navigation")
 	local provider = assert(state.provider)
 	local function context(issue)
 		return { provider = provider, issue = issue }
@@ -87,7 +94,7 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				nav.move_cursor("down")
+				detail_ui.move_cursor("down", is_selectable)
 			end,
 		})
 	)
@@ -98,27 +105,50 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				nav.move_cursor("up")
+				detail_ui.move_cursor("up", is_selectable)
 			end,
 		})
 	)
-	local refresh_item = {
-		desc = "Refresh issue",
-		index = 60,
-		opts = { nowait = true, silent = true },
-		callback = function()
-			require("atlas.issues.ui.detail").refresh()
-		end,
-	}
-	utils.insert_if(items, item("ui.refresh", refresh_item))
-	utils.insert_if(items, item("ui.refresh_view", refresh_item))
+	local refresh_keys = resolver.resolve("ui.refresh") or {}
+	vim.list_extend(refresh_keys, resolver.resolve("ui.refresh_view") or {})
+	if #refresh_keys > 0 then
+		table.insert(items, {
+			key = refresh_keys,
+			desc = "Refresh issue",
+			index = 80,
+			opts = { nowait = true, silent = true },
+			callback = function()
+				require("atlas.issues.ui.detail").refresh()
+			end,
+		})
+	end
+
+	if actions.find("edit_issue", context(state.current_issue)) then
+		utils.insert_if(
+			items,
+			item("issues.edit_issue", {
+				desc = "Edit issue",
+				index = 5,
+				opts = { nowait = true, silent = true },
+				callback = function()
+					local issue = state.current_issue
+					if issue then
+						local on_update = state.on_update
+						actions.run("edit_issue", context(issue), function(result)
+							complete_action(issue, on_update, result)
+						end)
+					end
+				end,
+			})
+		)
+	end
 
 	if provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
 				desc = "Open issue actions",
-				index = 50,
+				index = 1,
 				callback = function()
 					local issue = state.current_issue
 					if issue == nil then
@@ -137,7 +167,7 @@ function M.register(buf)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open issue in browser",
-			index = 2,
+			index = 4,
 			opts = { nowait = true },
 			callback = function()
 				if open_current_line() then
@@ -155,7 +185,7 @@ function M.register(buf)
 		items,
 		item("ui.toggle_subscription", {
 			desc = "Toggle subscription",
-			index = 51,
+			index = 30,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				local issue = state.current_issue
@@ -169,12 +199,10 @@ function M.register(buf)
 		})
 	)
 
-	M.remove(buf)
-	local general = items
-	vim.list_extend(general, links.keymaps(state))
+	vim.list_extend(items, links.keymaps(state))
 
 	utils.insert_if(
-		general,
+		items,
 		item("ui.next_panel_tab", {
 			desc = "Next detail tab",
 			index = 11,
@@ -186,7 +214,7 @@ function M.register(buf)
 	)
 
 	utils.insert_if(
-		general,
+		items,
 		item("ui.previous_panel_tab", {
 			desc = "Previous detail tab",
 			index = 10,
@@ -198,7 +226,7 @@ function M.register(buf)
 	)
 
 	utils.insert_if(
-		general,
+		items,
 		item("ui.help", {
 			desc = "Toggle help",
 			index = 100,
@@ -210,7 +238,7 @@ function M.register(buf)
 	)
 
 	utils.insert_if(
-		general,
+		items,
 		item("ui.toggle_panel", {
 			desc = "Toggle detail panel",
 			index = 12,
@@ -221,7 +249,7 @@ function M.register(buf)
 	)
 
 	utils.insert_if(
-		general,
+		items,
 		item("ui.close", {
 			desc = "Close detail panel",
 			index = 101,
@@ -244,16 +272,22 @@ function M.register(buf)
 			complete_action(issue, on_update, result)
 		end)
 	end)
-	vim.list_extend(general, custom_items)
-	help.register("General", general, { index = 300, buffer = buf })
-	registrations[buf] = general
+	registrations[buf] = {
+		{ group = "General", items = items, index = 1 },
+		{ group = "Custom", items = custom_items, index = 3 },
+	}
+	for _, registration in ipairs(registrations[buf]) do
+		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
+	end
 end
 
 ---@param buf integer
 function M.remove(buf)
 	local registered = registrations[buf]
 	if registered then
-		help.remove("General", registered, { buffer = buf })
+		for _, registration in ipairs(registered) do
+			help.remove(registration.group, registration.items, { buffer = buf })
+		end
 		registrations[buf] = nil
 	end
 end

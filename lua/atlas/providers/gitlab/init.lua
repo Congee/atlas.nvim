@@ -16,18 +16,17 @@ return {
 	domains = {
 		pulls = {
 			module = "atlas.pulls.providers.gitlab",
-			actions = "atlas.pulls.providers.gitlab.actions.registry",
 			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
 			bookmark_key = "S",
 		},
 		issues = {
 			module = "atlas.issues.providers.gitlab",
-			actions = "atlas.issues.providers.gitlab.actions.registry",
 			icon = { icon = "", hl_group = "AtlasGitLabTheme" },
 			bookmark_key = "S",
 		},
 	},
 	capabilities = {
+		completion = require("atlas.providers.gitlab.completion"),
 		repository = repositories,
 		notifications = notifications,
 		users = users,

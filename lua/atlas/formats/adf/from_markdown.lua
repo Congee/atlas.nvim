@@ -69,6 +69,13 @@ local function utf8_char_at(text, i)
 	return text:sub(i, i), 1
 end
 
+local inline_marks = {
+	["**"] = "strong",
+	["~~"] = "strike",
+	["*"] = "em",
+	["`"] = "code",
+}
+
 local function parse_inline(text)
 	local nodes = {}
 	local i = 1
@@ -97,6 +104,24 @@ local function parse_inline(text)
 	while i <= #text do
 		local icon, size = utf8_char_at(text, i)
 		local emoji_short_name = nerd_icon_to_emoji_shortname[icon]
+		local emoji_start, emoji_end, emoji_code
+		local mention_start, mention_end, mention_label, mention_id
+		local link_start, link_end, label, url
+		if icon == ":" then
+			emoji_start, emoji_end, emoji_code = text:find(":([%w_+-]+):", i)
+		elseif icon == "[" then
+			mention_start, mention_end, mention_label, mention_id = text:find("%[(.-)%]%{mention:([^}]+)%}", i)
+			link_start, link_end, label, url = text:find("%[(.-)%]%((.-)%)", i)
+		end
+
+		local delimiter = text:sub(i, i + 1)
+		local mark = inline_marks[delimiter]
+		if mark == nil then
+			delimiter = icon
+			mark = inline_marks[delimiter]
+		end
+		local close = mark and text:find(delimiter, i + #delimiter, true)
+
 		if emoji_short_name ~= nil then
 			table.insert(nodes, {
 				type = "emoji",
@@ -106,146 +131,89 @@ local function parse_inline(text)
 				},
 			})
 			i = i + size
-		else
-			local es, ee, emoji_code = text:find(":([%w_+-]+):", i)
-			if es == i then
-				local short_name = ":" .. emoji_code .. ":"
+		elseif emoji_start == i then
+			local short_name = ":" .. emoji_code .. ":"
+			table.insert(nodes, {
+				type = "emoji",
+				attrs = {
+					shortName = short_name,
+					text = short_name,
+				},
+			})
+			i = emoji_end + 1
+		elseif mention_start == i then
+			local mention_text = mention_label
+			if mention_text ~= "" and mention_text:sub(1, 1) ~= "@" then
+				mention_text = "@" .. mention_text
+			end
+			table.insert(nodes, {
+				type = "mention",
+				attrs = {
+					id = mention_id,
+					text = mention_text,
+					accessLevel = "",
+				},
+			})
+			i = mention_end + 1
+		elseif link_start == i then
+			local date_timestamp = url:match("^atlas%-date:(.+)$")
+			local parsed_mention_id = url:match("^atlas%-mention:(.+)$")
+			local parsed_emoji_short_name = url:match("^atlas%-emoji:(.+)$")
+
+			if date_timestamp ~= nil and date_timestamp ~= "" then
+				table.insert(nodes, {
+					type = "date",
+					attrs = {
+						timestamp = date_timestamp,
+					},
+				})
+			elseif parsed_mention_id ~= nil and parsed_mention_id ~= "" then
+				local mention_text = label
+				if mention_text ~= "" and mention_text:sub(1, 1) ~= "@" then
+					mention_text = "@" .. mention_text
+				end
+				table.insert(nodes, {
+					type = "mention",
+					attrs = {
+						id = parsed_mention_id,
+						text = mention_text,
+						accessLevel = "",
+					},
+				})
+			elseif parsed_emoji_short_name ~= nil and parsed_emoji_short_name ~= "" then
 				table.insert(nodes, {
 					type = "emoji",
 					attrs = {
-						shortName = short_name,
-						text = short_name,
+						shortName = parsed_emoji_short_name,
+						text = parsed_emoji_short_name,
 					},
 				})
-				i = ee + 1
 			else
-				local ms, me, mention_label, mention_id = text:find("%[(.-)%]%{mention:([^}]+)%}", i)
-				if ms == i then
-					local mention_text = mention_label
-					if mention_text ~= "" and mention_text:sub(1, 1) ~= "@" then
-						mention_text = "@" .. mention_text
-					end
-					table.insert(nodes, {
-						type = "mention",
-						attrs = {
-							id = mention_id,
-							text = mention_text,
-							accessLevel = "",
-						},
-					})
-					i = me + 1
-				else
-					local s, e, label, url = text:find("%[(.-)%]%((.-)%)", i)
-					if s == i then
-						local date_timestamp = url:match("^atlas%-date:(.+)$")
-						local parsed_mention_id = url:match("^atlas%-mention:(.+)$")
-						local parsed_emoji_short_name = url:match("^atlas%-emoji:(.+)$")
-
-						if date_timestamp ~= nil and date_timestamp ~= "" then
-							table.insert(nodes, {
-								type = "date",
-								attrs = {
-									timestamp = date_timestamp,
-								},
-							})
-						elseif parsed_mention_id ~= nil and parsed_mention_id ~= "" then
-							local mention_text = label
-							if mention_text ~= "" and mention_text:sub(1, 1) ~= "@" then
-								mention_text = "@" .. mention_text
-							end
-							table.insert(nodes, {
-								type = "mention",
-								attrs = {
-									id = parsed_mention_id,
-									text = mention_text,
-									accessLevel = "",
-								},
-							})
-						elseif parsed_emoji_short_name ~= nil and parsed_emoji_short_name ~= "" then
-							table.insert(nodes, {
-								type = "emoji",
-								attrs = {
-									shortName = parsed_emoji_short_name,
-									text = parsed_emoji_short_name,
-								},
-							})
-						else
-							table.insert(nodes, {
-								type = "text",
-								text = label,
-								marks = {
-									{ type = "link", attrs = { href = url } },
-								},
-							})
-						end
-						i = e + 1
-					elseif text:sub(i, i + 1) == "**" then
-						local close = text:find("%*%*", i + 2)
-						if close then
-							local content = text:sub(i + 2, close - 1)
-							append_text(nodes, content, { { type = "strong" } })
-							i = close + 2
-						else
-							local ch, n = utf8_char_at(text, i)
-							append_text(nodes, ch)
-							i = i + n
-						end
-					elseif text:sub(i, i + 1) == "~~" then
-						local close = text:find("~~", i + 2)
-						if close then
-							local content = text:sub(i + 2, close - 1)
-							append_text(nodes, content, { { type = "strike" } })
-							i = close + 2
-						else
-							local ch, n = utf8_char_at(text, i)
-							append_text(nodes, ch)
-							i = i + n
-						end
-					elseif text:sub(i, i) == "*" then
-						local close = text:find("%*", i + 1)
-						if close then
-							local content = text:sub(i + 1, close - 1)
-							append_text(nodes, content, { { type = "em" } })
-							i = close + 1
-						else
-							local ch, n = utf8_char_at(text, i)
-							append_text(nodes, ch)
-							i = i + n
-						end
-					elseif text:sub(i, i) == "`" then
-						local close = text:find("`", i + 1)
-						if close then
-							local content = text:sub(i + 1, close - 1)
-							append_text(nodes, content, { { type = "code" } })
-							i = close + 1
-						else
-							local ch, n = utf8_char_at(text, i)
-							append_text(nodes, ch)
-							i = i + n
-						end
-					else
-						local ch, n = utf8_char_at(text, i)
-						append_text(nodes, ch)
-						i = i + n
-					end
-				end
+				table.insert(nodes, {
+					type = "text",
+					text = label,
+					marks = {
+						{ type = "link", attrs = { href = url } },
+					},
+				})
 			end
+			i = link_end + 1
+		elseif close then
+			append_text(nodes, text:sub(i + #delimiter, close - 1), { { type = mark } })
+			i = close + #delimiter
+		else
+			append_text(nodes, icon)
+			i = i + size
 		end
 	end
 
 	return nodes
 end
 
----@param s string
----@return string
-local function trim(s)
-	return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
-end
-
 ---@param line string
 ---@return string[]
 local function parse_table_cells(line)
-	local row = trim(line)
+	local row = vim.trim(line)
 	if row:sub(1, 1) == "|" then
 		row = row:sub(2)
 	end
@@ -255,7 +223,7 @@ local function parse_table_cells(line)
 
 	local cells = vim.split(row, "|", { plain = true })
 	for i, cell in ipairs(cells) do
-		cells[i] = trim(cell)
+		cells[i] = vim.trim(cell)
 	end
 	return cells
 end
@@ -263,7 +231,7 @@ end
 ---@param line string
 ---@return boolean
 local function is_table_row(line)
-	local row = trim(line)
+	local row = vim.trim(line)
 	if row == "" then
 		return false
 	end
@@ -279,7 +247,7 @@ local function is_table_separator(line)
 	end
 
 	for _, cell in ipairs(cells) do
-		if not trim(cell):match("^:?-+:?$") then
+		if not cell:match("^:?-+:?$") then
 			return false
 		end
 	end
@@ -400,33 +368,34 @@ line_handlers.blockquote = {
 	end,
 }
 
+local function list_items(ctx, pattern)
+	local items = {}
+	while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match(pattern) do
+		local item = ctx.lines[ctx.i]:gsub(pattern, "")
+		table.insert(items, {
+			type = "listItem",
+			content = {
+				{
+					type = "paragraph",
+					content = parse_inline(item),
+				},
+			},
+		})
+		ctx.i = ctx.i + 1
+	end
+	ctx.i = ctx.i - 1
+	return items
+end
+
 -- * bullet item
 line_handlers.bulletList = {
 	match = function(line)
-		return line:match("^%*%s+") ~= nil
+		return line:match("^[-*+]%s+") ~= nil
 	end,
 	parse = function(_, ctx)
-		local items = {}
-
-		while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match("^%*%s+") do
-			local item = ctx.lines[ctx.i]:gsub("^%*%s+", "")
-			table.insert(items, {
-				type = "listItem",
-				content = {
-					{
-						type = "paragraph",
-						content = parse_inline(item),
-					},
-				},
-			})
-			ctx.i = ctx.i + 1
-		end
-
-		ctx.i = ctx.i - 1
-
 		return {
 			type = "bulletList",
-			content = items,
+			content = list_items(ctx, "^[-*+]%s+"),
 		}
 	end,
 }
@@ -437,27 +406,9 @@ line_handlers.orderedList = {
 		return line:match("^%d+%.%s+") ~= nil
 	end,
 	parse = function(_, ctx)
-		local items = {}
-
-		while ctx.i <= #ctx.lines and ctx.lines[ctx.i]:match("^%d+%.%s+") do
-			local item = ctx.lines[ctx.i]:gsub("^%d+%.%s+", "")
-			table.insert(items, {
-				type = "listItem",
-				content = {
-					{
-						type = "paragraph",
-						content = parse_inline(item),
-					},
-				},
-			})
-			ctx.i = ctx.i + 1
-		end
-
-		ctx.i = ctx.i - 1
-
 		return {
 			type = "orderedList",
-			content = items,
+			content = list_items(ctx, "^%d+%.%s+"),
 		}
 	end,
 }
@@ -574,23 +525,14 @@ function M.to_adf(text)
 		if line == "" then
 			ctx.i = ctx.i + 1
 		else
-			local handled = false
 			for _, name in ipairs(handler_order) do
 				local handler = line_handlers[name]
 				if handler.match(line, ctx) then
-					local node = handler.parse(line, ctx)
-					if node then
-						table.insert(doc.content, node)
-					end
-					ctx.i = ctx.i + 1
-					handled = true
+					table.insert(doc.content, handler.parse(line, ctx))
 					break
 				end
 			end
-
-			if not handled then
-				ctx.i = ctx.i + 1
-			end
+			ctx.i = ctx.i + 1
 		end
 	end
 

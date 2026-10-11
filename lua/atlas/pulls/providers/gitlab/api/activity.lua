@@ -6,12 +6,7 @@ local request_scope = require("atlas.core.requests")
 local mapper = require("atlas.pulls.providers.gitlab.api.mapper")
 
 local function same_actor(left, right)
-	local left_actor = left and left.actor or nil
-	local right_actor = right and right.actor or nil
-	return left_actor ~= nil
-		and right_actor ~= nil
-		and tostring(left_actor.username or left_actor.nickname or left_actor.name or "")
-			== tostring(right_actor.username or right_actor.nickname or right_actor.name or "")
+	return left.actor ~= nil and right.actor ~= nil and left.actor.username == right.actor.username
 end
 
 ---@param entries PullsActivityEntry[]
@@ -80,7 +75,7 @@ function M.fetch_activity(pr, opts, on_done)
 	end
 
 	local endpoint = string.format(
-		"/projects/%s/merge_requests/%d/notes?sort=asc&order_by=created_at&per_page=100",
+		"/projects/%s/merge_requests/%d/notes?sort=asc&order_by=created_at",
 		service.url_encode(path),
 		iid
 	)

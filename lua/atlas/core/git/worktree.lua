@@ -12,7 +12,7 @@ local SHA_LENGTH = 12
 ---@param value any
 ---@return string
 local function trim(value)
-	return (tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+	return vim.trim(tostring(value or ""))
 end
 
 ---@param path string
@@ -59,7 +59,7 @@ end
 ---@return string
 local function canonical(path)
 	local value = trim(path)
-	local real = vim.uv and vim.uv.fs_realpath and vim.uv.fs_realpath(value) or nil
+	local real = vim.uv.fs_realpath(value)
 	return (normalize_separators(real or value):gsub("/+$", ""))
 end
 
@@ -445,7 +445,7 @@ function M.ensure(opts, on_done)
 		scope.run(function(done)
 			return core_git.run(
 				{ "-C", repo_root, "worktree", "add", "--detach", dir, head_sha },
-				{ text = true },
+				{ text = true, console = true },
 				done
 			)
 		end, function(res)

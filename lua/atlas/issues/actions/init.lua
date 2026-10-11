@@ -5,7 +5,7 @@ local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local providers = require("atlas.providers")
 local repository = require("atlas.ui.repository")
-local templates = require("atlas.issues.templates")
+local templates = require("atlas.templates")
 local utils = require("atlas.issues.actions.utils")
 
 ---@alias AtlasIssueActionId
@@ -36,6 +36,7 @@ local utils = require("atlas.issues.actions.utils")
 ---@field label string
 ---@field icon string|nil
 ---@field hidden boolean|nil
+---@field confirmation boolean|nil
 ---@field is_available (fun(context: AtlasIssueActionContext): boolean, string|nil)|nil
 ---@field run fun(context: AtlasIssueActionContext, on_done: fun(result: IssuesActionResult|nil, err: string|nil)): boolean|{ cancel: fun() }|nil
 
@@ -144,7 +145,7 @@ M.copy_issue_key = utils.copy_issue_key
 M.copy_issue_url = utils.copy_issue_url
 M.manage_templates = {
 	id = "manage_templates",
-	label = "Manage Issue Templates",
+	label = "Manage Templates",
 	icon = icons.action("edit"),
 	run = function(_, done)
 		templates.manage(function(err)

@@ -69,7 +69,7 @@ local function fetch_comments(pr, opts, query, on_done)
 			return
 		end
 		local comments = mapper.to_comments_list(result)
-		service.set_cache(key, comments, service.cache_ttl())
+		service.set_cache(key, comments)
 		on_done(comments, nil)
 	end, { action = "Fetch PR comments", repo = pr.repo_full_name, id = pr.id })
 end
@@ -150,7 +150,9 @@ function M.edit_comment(pr, comment, on_done)
 			on_done(nil, "Bitbucket did not return the updated comment")
 			return
 		end
-		on_done(vim.tbl_extend("force", {}, comment, updated), nil)
+		local merged = vim.tbl_extend("force", {}, comment, updated)
+		merged.content_display = updated.content_display
+		on_done(merged, nil)
 	end, { action = "Edit PR comment", repo = pr.repo_full_name, id = pr.id, comment_id = comment.id })
 end
 

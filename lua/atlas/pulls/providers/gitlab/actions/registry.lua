@@ -89,7 +89,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
-	local pr = ctx.pr
+	local pr = assert(ctx.pr)
 	notify(ctx, "loading", string.format("Reopening %s...", pr_label(pr)))
 	pullrequests_api.set_state(pr, "reopen", function(ok, err)
 		if not ok then
@@ -103,18 +103,9 @@ local function reopen(ctx, done)
 end
 
 ---@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function edit_assignees_available(ctx)
-	if not is_open_or_draft(ctx) then
-		return false, "MR is not open"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
-	local pr = ctx.pr
+	local pr = assert(ctx.pr)
 	local path = pr.repo_full_name
 	if path == "" then
 		done(nil, "Could not determine project path")
@@ -423,7 +414,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local pr = ctx.pr
+	local pr = assert(ctx.pr)
 	local path = pr.repo_full_name
 	local iid = tonumber(pr.id)
 	if iid == nil then
@@ -500,15 +491,14 @@ register({
 	run = reopen,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
+register(actions.edit_pr)
 register(actions.edit_reviewers)
 
 register({
 	id = "edit_assignees",
 	label = "Edit assignees",
 	icon = icons.action("user"),
-	is_available = edit_assignees_available,
+	is_available = review_available,
 	run = edit_assignees,
 })
 

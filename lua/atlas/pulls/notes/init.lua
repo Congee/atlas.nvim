@@ -240,7 +240,6 @@ local function change(target, mutate)
 	if mutation_error then
 		return nil, mutation_error
 	end
-	document.target = merge_target(document.target, target)
 	local write_error = storage.write(storage.path(target.ref), document)
 	if write_error then
 		return nil, write_error

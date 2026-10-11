@@ -1,12 +1,12 @@
 local M = {}
 
+local completion = require("atlas.completion")
 local keymaps = require("atlas.core.keymaps")
 local notify = require("atlas.core.notify")
 local utils = require("atlas.ui.shared.utils")
 local statusline = require("atlas.ui.statusline")
 local virtual_lines = require("atlas.ui.components.virtual_lines")
 
-local completion_provider_by_buf = {}
 local preview_namespace = vim.api.nvim_create_namespace("atlas.editor.preview")
 local MAX_PREVIEW_LINES = 11
 
@@ -30,44 +30,6 @@ local function render_preview(buf, preview, width)
 		right_gravity = false,
 	})
 end
-
----@class AtlasMarkdownCompletionProvider
----@field trigger string|nil
----@field find_start fun(before: string, line: string, col: integer): integer|nil
----@field complete fun(base: string, line: string, col: integer): table[]|nil
----@field format_mention (fun(author: AtlasUser|PullsAuthor|nil): string)|nil
-
----@param findstart integer
----@param base string
----@return integer|table[]
-local function complete(findstart, base)
-	local buf = vim.api.nvim_get_current_buf()
-	local provider = completion_provider_by_buf[buf]
-	if type(provider) ~= "table" then
-		return findstart == 1 and -2 or {}
-	end
-
-	if findstart == 1 then
-		local line = vim.api.nvim_get_current_line()
-		local col = vim.api.nvim_win_get_cursor(0)[2]
-		local before = line:sub(1, col)
-		local start = provider.find_start(before, line, col)
-		if type(start) ~= "number" then
-			return -2
-		end
-		return start
-	end
-
-	local line = vim.api.nvim_get_current_line()
-	local col = vim.api.nvim_win_get_cursor(0)[2]
-	local items = provider.complete(tostring(base or ""), line, col)
-	if type(items) ~= "table" then
-		return {}
-	end
-	return items
-end
-
-_G.__atlas_markdown_complete = complete
 
 ---@class AtlasEditorAction
 ---@field key string
@@ -97,8 +59,8 @@ _G.__atlas_markdown_complete = complete
 ---@field on_save fun(text: string)|nil
 ---@field on_cancel fun()|nil
 ---@field actions AtlasEditorAction[]|nil
----@field completion AtlasMarkdownCompletionProvider|nil
 ---@field preview AtlasEditorPreview|nil
+---@field completion { context: AtlasCompletionContext, sources?: string[] }|nil
 
 ---@param preview AtlasEditorPreview
 ---@param max_lines integer
@@ -177,9 +139,6 @@ function M.open(opts)
 	pcall(vim.api.nvim_buf_set_name, buf, name)
 
 	local lines = vim.split(utils.normalize_newlines(opts.initial_text), "\n", { plain = true })
-	if #lines == 0 then
-		lines = { "" }
-	end
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	vim.api.nvim_set_option_value("modified", false, { buf = buf })
 
@@ -249,6 +208,9 @@ function M.open(opts)
 	vim.api.nvim_set_option_value("cursorbind", false, { win = win })
 	vim.api.nvim_set_option_value("cursorline", false, { win = win })
 	vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
+	if opts.completion then
+		completion.attach(buf, opts.completion)
+	end
 	statusline.inherit(win, source_win)
 	local function reveal_preview()
 		vim.api.nvim_win_call(win, function()
@@ -258,61 +220,6 @@ function M.open(opts)
 	if preview then
 		-- Virtual lines above line one need topfill to enter the window.
 		reveal_preview()
-	end
-
-	local completion = opts.completion
-	if completion ~= nil then
-		completion_provider_by_buf[buf] = completion
-		vim.api.nvim_set_option_value("completeopt", "menu,menuone,noselect,noinsert", { buf = buf })
-		vim.api.nvim_set_option_value("completefunc", "v:lua.__atlas_markdown_complete", { buf = buf })
-
-		local function open_completion_popup()
-			local provider = completion_provider_by_buf[buf]
-			if provider == nil then
-				return
-			end
-
-			if not vim.api.nvim_buf_is_valid(buf) or vim.api.nvim_get_current_buf() ~= buf then
-				return
-			end
-			if vim.fn.mode() ~= "i" or vim.fn.pumvisible() == 1 then
-				return
-			end
-
-			local start = complete(1, "")
-			if type(start) ~= "number" or start < 0 then
-				return
-			end
-
-			local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
-			local base = vim.api.nvim_get_current_line():sub(start + 1, cursor_col)
-			local items = complete(0, base)
-			if type(items) ~= "table" or #items == 0 then
-				return
-			end
-
-			vim.fn.complete(start + 1, items)
-		end
-
-		local trigger = completion.trigger
-		if type(trigger) == "string" and trigger ~= "" then
-			vim.keymap.set("i", trigger, function()
-				local provider = completion_provider_by_buf[buf]
-				if provider == nil then
-					return trigger
-				end
-				vim.schedule(open_completion_popup)
-				return trigger
-			end, { buffer = buf, silent = true, nowait = true, expr = true })
-		end
-
-		vim.api.nvim_create_autocmd("BufWipeout", {
-			buffer = buf,
-			once = true,
-			callback = function()
-				completion_provider_by_buf[buf] = nil
-			end,
-		})
 	end
 
 	local group = vim.api.nvim_create_augroup("AtlasEditor" .. buf, { clear = true })
@@ -369,9 +276,6 @@ function M.open(opts)
 
 	local function set_text(text)
 		local new_lines = vim.split(utils.normalize_newlines(text), "\n", { plain = true })
-		if #new_lines == 0 then
-			new_lines = { "" }
-		end
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
 		vim.api.nvim_win_set_cursor(win, { #new_lines, #new_lines[#new_lines] })
 		if preview then

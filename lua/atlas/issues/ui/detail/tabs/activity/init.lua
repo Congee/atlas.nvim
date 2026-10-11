@@ -48,7 +48,7 @@ function M.on_select(issue, refresh, opts)
 	M.reset()
 	state.loading = true
 
-	local issue_key = tostring(issue.key or "")
+	local issue_key = issue.key
 	notify.loading(string.format("Loading history for %s...", issue_key))
 	state.requests.run(function(done)
 		return comments.fetch_activity(issue, { force_refresh = force_refresh }, done)

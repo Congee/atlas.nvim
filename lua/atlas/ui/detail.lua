@@ -127,6 +127,37 @@ function M.is_showing(kind, tab)
 	return M.is_open(tab) and state.kind == kind
 end
 
+---@param direction "up"|"down"
+---@param is_selectable fun(lnum: integer): boolean
+function M.move_cursor(direction, is_selectable)
+	local win = state.win
+	local buf = state.buf
+	if not utils.window.valid(win) or not utils.buffer.valid(buf) then
+		return
+	end
+
+	local cursor = vim.api.nvim_win_get_cursor(win)
+	local line = cursor[1]
+	local col = cursor[2]
+	local max_line = vim.api.nvim_buf_line_count(buf)
+	local step = direction == "up" and -1 or 1
+	local bound = direction == "up" and 1 or max_line
+
+	if is_selectable(line) then
+		for lnum = line + step, bound, step do
+			if is_selectable(lnum) then
+				vim.api.nvim_win_set_cursor(win, { lnum, col })
+				return
+			end
+		end
+	end
+
+	local next_line = line + step
+	if next_line >= 1 and next_line <= max_line then
+		vim.api.nvim_win_set_cursor(win, { next_line, col })
+	end
+end
+
 ---@param tab integer|nil
 function M.close(tab)
 	if not M.is_open(tab) then

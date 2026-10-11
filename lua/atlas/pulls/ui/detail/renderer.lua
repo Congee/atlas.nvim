@@ -40,8 +40,7 @@ local function apply_spans(buf, lines, spans)
 end
 
 ---@param tab_items PullsDetailTab[]
----@param get_tab_module fun(key: string): PullsDetailTabModule|nil
-function M.render(tab_items, get_tab_module)
+function M.render(tab_items)
 	local buf = state.buf
 	local win = state.win
 	if buf == nil or not vim.api.nvim_buf_is_valid(buf) then
@@ -131,7 +130,7 @@ function M.render(tab_items, get_tab_module)
 		end
 
 		-- Tab content
-		local tab_mod = get_tab_module(state.current_tab)
+		local tab_mod = state.tab_module(state.current_tab)
 		local content_offset = #lines
 		if tab_mod then
 			local tab_lines_c, tab_spans_c, tab_line_map = tab_mod.render(pr, details, width)

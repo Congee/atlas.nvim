@@ -9,41 +9,6 @@ local request_scope = require("atlas.core.requests")
 local service = require("atlas.providers.bitbucket.client")
 local tasks = require("atlas.pulls.providers.bitbucket.api.tasks")
 
----@param pr PullRequest
----@param action "approve"|"request_changes"
----@return boolean
-function M.has_action(pr, action)
-	---@cast pr BitbucketPullRequest
-	return tostring(pr.links[action] or "") ~= ""
-end
-
----@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
----@param on_done fun(context: PullsReviewContext|nil, err: string|nil)
----@return nil
-function M.fetch_review_context(pr, _opts, on_done)
-	local mention_candidates = {}
-	local seen = {}
-	---@param author PullsAuthor|nil
-	local function add(author)
-		if not author then
-			return
-		end
-		local key = tostring(author.id or "")
-		if key == "" then
-			key = tostring(author.username or author.nickname or author.name or "")
-		end
-		if key == "" or seen[key] then
-			return
-		end
-		seen[key] = true
-		table.insert(mention_candidates, author)
-	end
-
-	add(pr.author)
-	on_done({ mention_candidates = mention_candidates }, nil)
-end
-
 ---@param user table|nil
 ---@return PullsAuthor|nil
 local function review_author(user)
@@ -150,7 +115,7 @@ local function fetch_thread_comments(pr, opts, on_done)
 				table.insert(items, comment)
 			end
 		end
-		service.set_cache(key, items, service.cache_ttl())
+		service.set_cache(key, items)
 		on_done(items, nil)
 	end, { action = "Fetch PR threads", repo = pr.repo_full_name, id = pr.id })
 end

@@ -9,21 +9,6 @@ local utils = require("atlas.ui.shared.utils")
 
 ---@alias AtlasCommentThreadAction "add_comment"|"add_task"|"edit"|"delete"|"toggle_task"|"toggle_resolved"
 
----@param author { name: string, nickname: string|nil }|nil
----@return string
-local function author_name(author)
-	if author == nil then
-		return "Unknown"
-	end
-	if author.nickname and author.nickname ~= "" then
-		return author.nickname
-	end
-	if author.name and author.name ~= "" then
-		return author.name
-	end
-	return "Unknown"
-end
-
 ---@param author PullsAuthor|nil
 ---@return string|nil
 local function author_mention(author)
@@ -57,6 +42,18 @@ local function resolution_text(comment)
 end
 
 ---@param comment PullsComment
+---@return boolean
+local function is_outdated(comment)
+	return comment.outdated == true or comment.state == "OUTDATED"
+end
+
+---@param comment PullsComment
+---@return boolean
+local function is_closed(comment)
+	return comment.state == "RESOLVED" or is_outdated(comment)
+end
+
+---@param comment PullsComment
 ---@return [string, string][]
 local function comment_status(comment)
 	local chunks = {}
@@ -65,8 +62,7 @@ local function comment_status(comment)
 		chunks[#chunks + 1] = { resolution, "AtlasTextMuted" }
 	end
 
-	local outdated = comment.outdated == true or comment.state == "OUTDATED"
-	if outdated then
+	if is_outdated(comment) then
 		if #chunks > 0 then
 			chunks[#chunks + 1] = { "  ", "AtlasTextMuted" }
 		end
@@ -97,7 +93,7 @@ function M.status_marker(comment)
 		end
 		chunks[#chunks + 1] = { icons.general("success") }
 	end
-	if comment.outdated == true or comment.state == "OUTDATED" then
+	if is_outdated(comment) then
 		if #chunks > 0 then
 			chunks[#chunks + 1] = { " ", "AtlasTextMuted" }
 		end
@@ -114,7 +110,7 @@ end
 local function comment_item(comment, opts, is_root)
 	local is_deleted = comment.state == "DELETED"
 	local is_resolved = comment.state == "RESOLVED"
-	local author = author_name(comment.author)
+	local author = presentation.author_name(comment.author)
 	local author_hl = presentation.author_hl(author)
 	local user_icon = icons.general("user")
 	local additional = utils.relative_time(comment.created_on)
@@ -142,10 +138,7 @@ local function comment_item(comment, opts, is_root)
 		item.right_text = comment_status(comment)
 	end
 
-	local text = comment.content_raw or ""
-	if opts.format_text then
-		text = opts.format_text(text)
-	end
+	local text = comment.content_display or comment.content_raw or ""
 
 	if comment.is_task then
 		local checkbox = is_resolved and "[x]" or "[ ]"
@@ -275,13 +268,7 @@ end
 ---@param node AtlasCommentThreadNode
 ---@return boolean
 local function is_collapsible(node)
-	return not node.comment.is_task
-		and (
-			#node.children > 0
-			or node.comment.state == "RESOLVED"
-			or node.comment.state == "OUTDATED"
-			or node.comment.outdated == true
-		)
+	return not node.comment.is_task and (#node.children > 0 or is_closed(node.comment))
 end
 
 ---@param nodes AtlasCommentThreadNode[]
@@ -317,7 +304,7 @@ local function build_item(node, opts, is_root, root)
 	item.line_map.thread_has_replies = not is_root or #node.children > 0
 	if is_root and not node.comment.is_task and opts.expanded and not opts.expanded(node.comment) then
 		item.children = {}
-		if node.comment.state == "RESOLVED" or node.comment.state == "OUTDATED" or node.comment.outdated == true then
+		if is_closed(node.comment) then
 			item.content = nil
 			item.footer_items = {}
 		elseif #node.children > 0 then
@@ -352,7 +339,6 @@ end
 ---@field content_max_lines? integer|fun(comment: PullsComment): integer|nil
 ---@field content_truncated_key? string
 ---@field show_task_label? boolean
----@field format_text? fun(text: string): string
 
 ---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
@@ -426,19 +412,17 @@ function M.render_compact(node, width, expanded, location, opts)
 
 	local expander = icons.general(expanded and "fold_open" or "fold_closed")
 	item.icon = expander
-	item.author = "@" .. author_name(comment.author)
+	item.author = "@" .. presentation.author_name(comment.author)
 	item.line_map.tree_key = M.comment_key(comment)
 	return threads.render({ item }, math.max(1, width - 2), threads_opts(0, opts))
 end
 
 ---@param comment PullsComment
 ---@param width integer
----@param format_text (fun(text: string): string)|nil
 ---@return AtlasEditorPreview
-function M.render_comment(comment, width, format_text)
+function M.render_comment(comment, width)
 	local lines, spans = M.render({ { comment = comment, children = {} } }, width, {
 		padding_x = 1,
-		format_text = format_text,
 	})
 	return { lines = lines, highlights = spans }
 end

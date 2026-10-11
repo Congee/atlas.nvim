@@ -47,7 +47,7 @@ end
 ---@param issue Issue
 ---@return boolean
 function M.is_current(issue)
-	return M.current_issue ~= nil and tostring(M.current_issue.key or "") == tostring(issue.key or "")
+	return M.current_issue ~= nil and M.current_issue.key == issue.key
 end
 
 ---@param run_id any

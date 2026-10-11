@@ -196,9 +196,9 @@ end
 ---@param pr PullRequest
 ---@param repo_path string
 ---@param on_done fun(err: string|nil)
----@param on_progress (fun(label: string, percent: integer))|nil
+---@param opts { console?: boolean, on_progress?: fun(label: string, percent: integer) }|nil
 ---@return { cancel: fun() }|nil
-local function fetch_pr_refs(pr, repo_path, on_done, on_progress)
+local function fetch_pr_refs(pr, repo_path, on_done, opts)
 	local base_revision, head_revision, revision_err = M.pr_diff_revisions(pr)
 	if not base_revision or not head_revision then
 		on_done(revision_err)
@@ -232,7 +232,7 @@ local function fetch_pr_refs(pr, repo_path, on_done, on_progress)
 			return
 		end
 		scope.run(function(done)
-			return git.fetch_refs(repo_path, ref.remote, { ref.ref }, done, on_progress)
+			return git.fetch_refs(repo_path, ref.remote, { ref.ref }, done, opts)
 		end, function(ok, err)
 			if not ok then
 				on_done(err)
@@ -321,9 +321,12 @@ local function ensure_repository(pr, repo_path, on_progress, on_done)
 	local function fetch(path)
 		on_progress("Fetching pull request refs...")
 		scope.run(function(done)
-			return fetch_pr_refs(pr, path, done, function(phase, percent)
-				on_progress(progress_message("Fetching pull request refs", phase, percent))
-			end)
+			return fetch_pr_refs(pr, path, done, {
+				console = true,
+				on_progress = function(phase, percent)
+					on_progress(progress_message("Fetching pull request refs", phase, percent))
+				end,
+			})
 		end, function(err)
 			if err then
 				on_done(nil, err)
@@ -368,7 +371,7 @@ local function ensure_repository(pr, repo_path, on_progress, on_done)
 					clone_url,
 					path,
 				},
-				{ text = true },
+				{ text = true, console = true },
 				done,
 				function(phase, percent)
 					on_progress(progress_message("Cloning repository", phase, percent))

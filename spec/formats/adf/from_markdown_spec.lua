@@ -115,16 +115,23 @@ describe("Jira Markdown to ADF", function()
 		})
 	end)
 
-	it("converts lists", function()
-		converts("* a\n* b", {
-			{
-				type = "bulletList",
-				content = {
-					{ type = "listItem", content = { paragraph({ text("a") }) } },
-					{ type = "listItem", content = { paragraph({ text("b") }) } },
+	it("converts bullet lists with each Markdown marker", function()
+		for _, marker in ipairs({ "*", "-", "+" }) do
+			converts(marker .. " a\n" .. marker .. " **b**\n---\nafter", {
+				{
+					type = "bulletList",
+					content = {
+						{ type = "listItem", content = { paragraph({ text("a") }) } },
+						{ type = "listItem", content = { paragraph({ text("b", { { type = "strong" } }) }) } },
+					},
 				},
-			},
-		})
+				{ type = "rule" },
+				paragraph({ text("after") }),
+			})
+		end
+	end)
+
+	it("converts numbered lists", function()
 		converts("1. first\n2. second", {
 			{
 				type = "orderedList",

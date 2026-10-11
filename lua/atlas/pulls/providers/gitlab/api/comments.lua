@@ -105,7 +105,7 @@ end
 ---@return PullsComment
 local function add_permalink(pr, comment)
 	local note_id = tonumber(comment.id)
-	local base = tostring((pr.link or {}).html or "")
+	local base = pr.link.html
 	if note_id and base ~= "" then
 		comment.html_url = string.format("%s#note_%d", base, note_id)
 	end
@@ -136,8 +136,8 @@ function M.fetch_review_comments(pr, opts, on_done)
 	end
 
 	local encoded = service.url_encode(path)
-	local discussions_ep = string.format("/projects/%s/merge_requests/%d/discussions?per_page=100", encoded, iid)
-	local drafts_ep = string.format("/projects/%s/merge_requests/%d/draft_notes?per_page=100", encoded, iid)
+	local discussions_ep = string.format("/projects/%s/merge_requests/%d/discussions", encoded, iid)
+	local drafts_ep = string.format("/projects/%s/merge_requests/%d/draft_notes", encoded, iid)
 
 	local requests = request_scope.new()
 	requests.all({
@@ -169,10 +169,9 @@ function M.fetch_review_comments(pr, opts, on_done)
 				local first = notes[1]
 				if first.system ~= true then
 					local discussion_id = tostring(discussion.id or "")
-					local root =
-						add_permalink(pr, mapper.to_comment(first, first.id, discussion_id, first.resolved == true))
-					discussion_roots[discussion_id] = root
 					local resolved = first.resolved == true
+					local root = add_permalink(pr, mapper.to_comment(first, first.id, discussion_id, resolved))
+					discussion_roots[discussion_id] = root
 					table.insert(result, root)
 					for i = 2, #notes do
 						local note = notes[i]
@@ -278,8 +277,7 @@ function M.fetch_review_threads(pr, opts, on_done)
 			return pages
 		end,
 		drafts = function(done)
-			local endpoint =
-				string.format("/projects/%s/merge_requests/%d/draft_notes?per_page=100", service.url_encode(path), iid)
+			local endpoint = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
 			return service.fetch_all_pages(endpoint, done, {
 				action = "Fetch MR draft comments",
 				project_path = path,
@@ -555,7 +553,7 @@ function M.add_comment(pr, content, opts, on_done)
 		return nil
 	end
 	local parent = opts.parent
-	if parent and parent.pending and tostring(parent.thread_id or "") == "" then
+	if parent and parent.pending and (parent.thread_id or "") == "" then
 		on_done(nil, "GitLab cannot reply to this draft until it is published")
 		return nil
 	end
@@ -568,7 +566,7 @@ function M.add_comment(pr, content, opts, on_done)
 		local endpoint = string.format("/projects/%s/merge_requests/%d/draft_notes", service.url_encode(path), iid)
 		local payload = { note = content }
 		if parent then
-			local discussion_id = tostring(parent.thread_id or "")
+			local discussion_id = parent.thread_id or ""
 			if discussion_id ~= "" then
 				payload.in_reply_to_discussion_id = discussion_id
 			end
@@ -589,7 +587,7 @@ function M.add_comment(pr, content, opts, on_done)
 		})
 	end
 
-	local discussion_id = parent and tostring(parent.thread_id or "") or ""
+	local discussion_id = parent and parent.thread_id or ""
 	if parent and discussion_id == "" then
 		on_done(nil, "Missing discussion id")
 		return nil
@@ -647,7 +645,7 @@ local function comment_endpoint(path, iid, comment)
 	if draft_note_id then
 		return string.format("%s/draft_notes/%d", prefix, note_id), true
 	end
-	local discussion_id = tostring(comment.thread_id or "")
+	local discussion_id = comment.thread_id or ""
 	if discussion_id ~= "" then
 		return string.format("%s/discussions/%s/notes/%d", prefix, service.url_encode(discussion_id), note_id), false
 	end
@@ -659,7 +657,7 @@ end
 ---@param on_done fun(comment: PullsComment|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.edit_comment(pr, comment, on_done)
-	local body = tostring(comment.content_raw or "")
+	local body = comment.content_raw
 	local path, iid = project_iid(pr)
 	if path == "" or iid == nil then
 		on_done(nil, "Invalid MR identifier")
@@ -683,7 +681,7 @@ function M.edit_comment(pr, comment, on_done)
 			updated = mapper.to_draft_comment(result, comment.parent_id)
 		else
 			local first_id = comment.parent_id or comment.id
-			local discussion_id = tostring(comment.thread_id or "")
+			local discussion_id = comment.thread_id or ""
 			updated = add_permalink(pr, mapper.to_comment(result, first_id, discussion_id, comment.state == "RESOLVED"))
 		end
 		updated.parent_id = comment.parent_id
@@ -739,7 +737,7 @@ end
 ---@return { cancel: fun() }|nil
 function M.set_thread_resolved(pr, root, resolved, on_done)
 	local path, iid = project_iid(pr)
-	local discussion_id = tostring(root.thread_id or "")
+	local discussion_id = root.thread_id or ""
 	if path == "" or iid == nil then
 		on_done(false, "Invalid MR identifier")
 		return nil

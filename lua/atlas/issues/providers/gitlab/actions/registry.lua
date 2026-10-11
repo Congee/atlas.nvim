@@ -8,6 +8,7 @@
 local M = {}
 
 local actions = require("atlas.issues.actions")
+local utils = require("atlas.issues.actions.utils")
 local icons = require("atlas.ui.shared.icons")
 local picker = require("atlas.ui.picker")
 local notify = require("atlas.core.notify")
@@ -47,7 +48,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function close(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	notify.loading(string.format("Closing %s...", key))
 	issues_api.set_state(key, "close", function(ok, err)
 		if not ok then
@@ -73,7 +74,7 @@ end
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
 	local issue = assert(ctx.issue)
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	notify.loading(string.format("Reopening %s...", key))
 	issues_api.set_state(key, "reopen", function(ok, err)
 		if not ok then
@@ -99,7 +100,7 @@ end
 local function assign(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
@@ -209,7 +210,7 @@ end
 local function labels(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
-	local key = tostring(issue.key or "")
+	local key = issue.key
 	local path = issue.project_path
 	if path == "" then
 		local err = "Could not determine project path"
@@ -254,17 +255,7 @@ local function labels(ctx, done)
 				for _, it in ipairs(selected) do
 					selected_set[it.name] = true
 				end
-				local adds, removes = {}, {}
-				for name, _ in pairs(selected_set) do
-					if not original_set[name] then
-						table.insert(adds, name)
-					end
-				end
-				for name, _ in pairs(original_set) do
-					if not selected_set[name] then
-						table.insert(removes, name)
-					end
-				end
+				local adds, removes = utils.selection_diff(original_set, selected_set)
 				if #adds == 0 and #removes == 0 then
 					done(nil, nil)
 					return
@@ -375,34 +366,7 @@ local function search_issues(project, ctx, done)
 					preview_done({ title = issue.key, lines = { err or "Failed to load issue" } })
 					return
 				end
-				local assignees = vim.tbl_map(function(user)
-					return "@" .. user.username
-				end, details.assignees)
-				local label_names = vim.tbl_map(function(label)
-					return label.name
-				end, details.labels)
-				local author = issue.reporter and issue.reporter.name or "Unknown"
-				local lines = {
-					"**Status:** " .. (issue.status or "Open"),
-					"**Author:** " .. author,
-					"**Assignees:** " .. (#assignees > 0 and table.concat(assignees, ", ") or "Unassigned"),
-				}
-				if #label_names > 0 then
-					table.insert(lines, "**Labels:** " .. table.concat(label_names, ", "))
-				end
-				if details.milestone then
-					table.insert(lines, "**Milestone:** " .. details.milestone.title)
-				end
-				vim.list_extend(lines, { "", "## Description", "" })
-				local description = vim.trim(details.description)
-				vim.list_extend(
-					lines,
-					vim.split(description ~= "" and description or "No description", "\n", { plain = true })
-				)
-				preview_done({
-					title = string.format("%s - %s", issue.key, issue.title),
-					lines = lines,
-				})
+				preview_done(utils.issue_preview(issue, details))
 			end)
 		end,
 		fetch = function(query, fetch_done)
@@ -488,24 +452,8 @@ local function edit_issue(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue GitLabIssue
 
-	notify.loading(string.format("Loading %s...", issue.key))
-	issues_api.fetch_issue(issue, { force_refresh = true }, function(details, err)
-		if err or details == nil then
-			local message = err or "Issue not found"
-			notify.error(message)
-			done(nil, message)
-			return
-		end
-
-		notify.clear()
-		require("atlas.issues.create.gitlab.issue").open({
-			project_path = issue.project_path,
-			issue = issue,
-			details = details,
-			on_done = function(result, edit_err)
-				done(result and { issue_key = result.key } or nil, edit_err)
-			end,
-		})
+	return require("atlas.issues.providers.gitlab.ui.editor").edit(issue, function(result, err)
+		done(result and { issue_key = result.key } or nil, err)
 	end)
 end
 
@@ -518,22 +466,11 @@ local function create_issue(ctx, done)
 		---@cast issue GitLabIssue
 		resolved = issue.project_path
 	end
+
 	local function open_editor(path)
-		local create_issue_ui = require("atlas.issues.create.gitlab.issue")
-		create_issue_ui.open({
-			project_path = path,
-			on_done = function(result, err)
-				if err then
-					done(nil, tostring(err))
-					return
-				end
-				if result == nil then
-					done(nil, nil)
-					return
-				end
-				done({ issue_key = result.key }, nil)
-			end,
-		})
+		require("atlas.issues.providers.gitlab.ui.editor").open(path, function(result, err)
+			done(result and { issue_key = result.key } or nil, err)
+		end)
 	end
 
 	if resolved ~= "" then
@@ -594,8 +531,17 @@ local function toggle_subscription(ctx, done)
 end
 
 register({
+	id = "edit_issue",
+	label = "Edit Issue",
+	icon = icons.action("edit"),
+	is_available = has_issue,
+	run = edit_issue,
+})
+register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
+register({
 	id = "close",
 	label = "Close Issue",
+	confirmation = true,
 	icon = icons.action("close"),
 	is_available = close_available,
 	run = close,
@@ -683,14 +629,6 @@ register({
 	is_available = toggle_subscription_available,
 	run = toggle_subscription,
 })
-register({
-	id = "edit_issue",
-	label = "Edit Issue",
-	icon = icons.action("edit"),
-	is_available = has_issue,
-	run = edit_issue,
-})
-register({ id = "create_issue", label = "Create Issue", icon = icons.action("create"), run = create_issue })
 
 ---@param id AtlasGitLabIssueActionId
 ---@return AtlasIssueAction|nil

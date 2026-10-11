@@ -1,6 +1,7 @@
 local config = require("atlas.config")
 local highlights = require("atlas.pulls.pipelines.highlights")
 local icons = require("atlas.ui.shared.icons")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local utils = require("atlas.ui.shared.utils")
 
 local M = {}
@@ -88,8 +89,7 @@ local function append_entries(pane, entries, lines, spans, prepared, depth, pare
 			local line = prefix .. formatted.text
 			append_highlights(formatted.spans, spans, #lines, #prefix)
 			if depth == 0 and entry.duration then
-				local elapsed = entry.duration < 60 and string.format("%ds", math.floor(entry.duration))
-					or utils.human_duration(entry.duration)
+				local elapsed = pipeline_utils.format_duration(entry.duration)
 				if entry.duration > 0 and entry.duration < 1 then
 					elapsed = string.format("%.1fms", entry.duration * 1000)
 				end

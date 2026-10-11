@@ -1,6 +1,21 @@
 local M = {}
 
-local highlights = require("atlas.ui.shared.highlights")
+local highlights = require("atlas.ui.highlights")
+
+---@param author PullsAuthor|nil
+---@return string
+function M.author_name(author)
+	if author == nil then
+		return "Unknown"
+	end
+	if author.nickname and author.nickname ~= "" then
+		return author.nickname
+	end
+	if author.name and author.name ~= "" then
+		return author.name
+	end
+	return "Unknown"
+end
 
 ---@param name string|nil
 ---@return string

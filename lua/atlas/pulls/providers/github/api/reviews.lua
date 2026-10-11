@@ -73,24 +73,6 @@ local REVIEWER_FIELDS = [[
 ... on EnterpriseTeam{id teamName:name slug combinedSlug}
 ]]
 
-local REVIEW_MENTIONS_QUERY = [[
-query($owner:String!,$repo:String!,$number:Int!){
-  repository(owner:$owner,name:$repo){
-    pullRequest(number:$number){
-      assignees(first:100){nodes{id login name}}
-      reviews(first:100){nodes{author{login}}}
-      reviewRequests(first:100){
-        nodes{
-          requestedReviewer{
-]] .. REVIEWER_FIELDS .. [[
-          }
-        }
-      }
-    }
-  }
-}
-]]
-
 local REVIEWERS_QUERY = [[
 query($owner:String!,$name:String!,$number:Int!,$endCursor:String){
   repository(owner:$owner,name:$name){
@@ -844,10 +826,9 @@ local function fetch_comments(pr, include_hunks, on_done)
 end
 
 ---@param pr PullRequest
----@param _opts { force_refresh: boolean|nil }|nil
 ---@param on_done fun(tasks: PullsComment[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
-local function fetch_tasks(pr, _opts, on_done)
+local function fetch_tasks(pr, on_done)
 	local repo_slug = pr.repo_full_name or ""
 	if repo_slug == "" then
 		vim.schedule(function()
@@ -897,7 +878,7 @@ local function fetch_review(pr, opts, include_hunks, on_done)
 			return fetch_comments(pr, include_hunks, done)
 		end,
 		tasks = function(done)
-			return fetch_tasks(pr, opts, done)
+			return fetch_tasks(pr, done)
 		end,
 		details = function(done)
 			return fetch_review_details(pr, opts, done)
@@ -1139,47 +1120,30 @@ function M.fetch_context(pr, opts, on_done)
 		end
 	end
 
-	local function fetch(query, paginate, action, done)
-		local args = {
-			"api",
-			"graphql",
-			"-f",
-			"query=" .. reviewer_query(query),
-			"-f",
-			"owner=" .. owner,
-			"-f",
-			"repo=" .. repo,
-			"-F",
-			"number=" .. tostring(pr.id),
-		}
-		if paginate then
-			vim.list_extend(args, { "--paginate", "--slurp" })
-		end
-		return cli.gh(args, done, { action = action, repo = repo_slug, number = pr.id })
-	end
-
-	local function pull_request_from_response(response)
-		local data = json.safe_table(json.safe_table(response).data)
-		return json.nilify(json.safe_table(data.repository).pullRequest)
-	end
-
-	local requests = request_scope.new()
-	requests.all({
-		files = function(done)
-			return fetch(REVIEW_CONTEXT_QUERY, true, "Fetch PR reviewed files", done)
-		end,
-		mentions = function(done)
-			return fetch(REVIEW_MENTIONS_QUERY, false, "Fetch PR review mentions", done)
-		end,
-	}, function(results, errors)
-		if errors.files or type(results.files) ~= "table" then
-			on_done(nil, errors.files or "Failed to fetch reviewed files")
+	local args = {
+		"api",
+		"graphql",
+		"-f",
+		"query=" .. REVIEW_CONTEXT_QUERY,
+		"-f",
+		"owner=" .. owner,
+		"-f",
+		"repo=" .. repo,
+		"-F",
+		"number=" .. tostring(pr.id),
+		"--paginate",
+		"--slurp",
+	}
+	return cli.gh(args, function(pages, err)
+		if err or type(pages) ~= "table" then
+			on_done(nil, err or "Failed to fetch reviewed files")
 			return
 		end
 		local pull_request
 		local reviewed_files = {}
-		for _, page in ipairs(results.files) do
-			local current = pull_request_from_response(page)
+		for _, page in ipairs(pages) do
+			local data = json.safe_table(json.safe_table(page).data)
+			local current = json.nilify(json.safe_table(data.repository).pullRequest)
 			if not current then
 				on_done(nil, "Failed to fetch reviewed files")
 				return
@@ -1196,46 +1160,10 @@ function M.fetch_context(pr, opts, on_done)
 			return
 		end
 		pr.node_id = tostring(pull_request.id or "")
-		local mentions = pull_request_from_response(results.mentions)
-		local mention_error = errors.mentions
-		if type(mentions) ~= "table" then
-			mention_error = mention_error or "Missing pull request mention data"
-		end
-		if mention_error then
-			mentions = {}
-		end
-
-		local mention_candidates = {}
-		local seen = {}
-		local function add(author)
-			if author == nil then
-				return
-			end
-			local key = tostring(author.username or author.nickname or author.name or ""):lower()
-			if key ~= "" and not seen[key] then
-				seen[key] = true
-				table.insert(mention_candidates, author)
-			end
-		end
-
-		add(pr.author)
-		for _, raw in ipairs(((mentions.assignees or {}).nodes or {})) do
-			add(review_author(raw))
-		end
-		for _, raw in ipairs(((mentions.reviews or {}).nodes or {})) do
-			add(review_author(raw.author))
-		end
-		for _, raw in ipairs(((mentions.reviewRequests or {}).nodes or {})) do
-			add(review_author(raw.requestedReviewer or raw))
-		end
-
-		local context = { mention_candidates = mention_candidates, reviewed_files = reviewed_files }
-		if not mention_error then
-			cli.set_mem(cache_key, context, cli.cache_ttl())
-		end
-		on_done(context, mention_error and ("Mention suggestions unavailable: " .. mention_error) or nil)
-	end)
-	return requests
+		local context = { reviewed_files = reviewed_files }
+		cli.set_mem(cache_key, context, cli.cache_ttl())
+		on_done(context, nil)
+	end, { action = "Fetch PR reviewed files", repo = repo_slug, number = pr.id })
 end
 
 return M

@@ -1,7 +1,7 @@
 local M = {}
 
 local utils = require("atlas.ui.shared.utils")
-local highlights = require("atlas.ui.shared.highlights")
+local highlights = require("atlas.ui.highlights")
 local markdown = require("atlas.formats.markdown")
 
 ---@alias AtlasThreadMode "tree" | "linked"

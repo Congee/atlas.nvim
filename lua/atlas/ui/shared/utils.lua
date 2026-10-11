@@ -158,6 +158,26 @@ function M.append_block(lines, spans, block, padding)
 	end
 end
 
+---@param buf integer
+---@param ns integer
+---@param spans AtlasUIHighlight[]
+function M.apply_spans(buf, ns, spans)
+	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+	for _, span in ipairs(spans) do
+		if span.line_hl_group then
+			vim.api.nvim_buf_set_extmark(buf, ns, span.line, 0, {
+				line_hl_group = span.line_hl_group,
+			})
+		else
+			vim.api.nvim_buf_set_extmark(buf, ns, span.line, span.start_col, {
+				end_row = span.line,
+				end_col = span.end_col,
+				hl_group = span.hl_group,
+			})
+		end
+	end
+end
+
 ---Wrap display content, preserving highlights and prefixing each resulting row.
 ---@param content { lines: string[], highlights?: { line: integer, start_col: integer, end_col: integer, hl_group: string }[] }
 ---@param width integer Content width, excluding the prefix.
@@ -426,10 +446,6 @@ function M.sanitize_lines(text)
 	text = M.normalize_newlines(text)
 	for line in (text .. "\n"):gmatch("(.-)\n") do
 		table.insert(out, line)
-	end
-
-	if #out == 0 then
-		return { "-" }
 	end
 
 	return out

@@ -1,5 +1,7 @@
 ---@type PullsProviderDetail
-local M = {}
+local M = {
+	-- chips = nil,
+}
 
 local icons = require("atlas.ui.shared.icons")
 

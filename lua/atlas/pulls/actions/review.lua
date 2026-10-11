@@ -17,9 +17,7 @@ local comment_threads = require("atlas.pulls.ui.components.comment_threads")
 ---@field comment PullsComment|nil
 ---@field review_entry PullsReviewHistoryEntry|nil
 ---@field draft { inline?: PullsInlineCommentPosition, file?: PullsFileCommentPosition, pending?: boolean, preview?: AtlasEditorPreview, initial_text?: string, kind?: "comment"|"suggestion" }|nil
----@field review_context PullsReviewContext|nil
 ---@field conversation PullsComment[]|nil
----@field reviewers PullsReviewer[]|nil
 ---@field on_submit (fun())|nil
 ---@field upsert_comment (fun(comment: PullsComment))|nil
 ---@field remove_comment (fun(comment: PullsComment))|nil
@@ -76,21 +74,17 @@ function M.group_comments(comments, tasks)
 end
 
 ---@param context AtlasReviewActionContext
----@return AtlasMarkdownCompletionProvider|nil
-local function mention_completion(context)
-	local capability = context.provider.capabilities.comments
-	if not capability or not capability.comment_completion then
-		return nil
-	end
-	return capability.comment_completion(context)
-end
-
----@param context AtlasReviewActionContext
 ---@param opts AtlasEditorOptions
 local function open_editor(context, opts)
 	opts.width_ratio = 0.7
 	opts.height_ratio = 0.5
-	opts.completion = opts.completion or mention_completion(context)
+	opts.completion = {
+		context = {
+			provider = context.provider.id,
+			repository = context.pr.repo_full_name,
+			pr = { id = context.pr.id, repo_full_name = context.pr.repo_full_name },
+		},
+	}
 	local on_save, on_submit = opts.on_save, context.on_submit
 	if on_save and on_submit then
 		opts.on_save = function(text)
@@ -193,11 +187,6 @@ M.add_comment = {
 		local pending = opts.pending == true or (parent ~= nil and parent.pending == true)
 		local suggestion = opts.kind == "suggestion"
 
-		local completion = mention_completion(context)
-		local mention = ""
-		if parent and completion and completion.format_mention then
-			mention = completion.format_mention(parent.author) or ""
-		end
 		local title = " Add Comment "
 		if parent then
 			title = " Reply to Comment "
@@ -212,20 +201,14 @@ M.add_comment = {
 		end
 		local preview = opts.preview
 		if preview == nil and parent then
-			local formatter = comments and comments.comment_formatter
-			preview = comment_threads.render_comment(
-				parent,
-				math.max(math.floor(vim.o.columns * 0.7), 80),
-				formatter and formatter(context)
-			)
+			preview = comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.7), 80))
 		end
 		local template_action = comment_template_action()
 
 		open_editor(context, {
 			key = "pr-comment",
 			title = title,
-			initial_text = opts.initial_text or (mention ~= "" and (mention .. " ") or ""),
-			completion = completion,
+			initial_text = opts.initial_text,
 			preview = preview,
 			actions = template_action and { template_action } or nil,
 			on_save = function(text)
@@ -293,21 +276,10 @@ M.add_task = {
 			return false
 		end
 
-		local preview
-		if parent then
-			local comments = context.provider.capabilities.comments
-			local formatter = comments and comments.comment_formatter
-			preview = comment_threads.render_comment(
-				parent,
-				math.max(math.floor(vim.o.columns * 0.7), 80),
-				formatter and formatter(context)
-			)
-		end
-
 		open_editor(context, {
-			key = "pr-task-add-" .. tostring(context.pr.id or ""),
+			key = "pr-task-add-" .. tostring(context.pr.id),
 			title = " Add Task ",
-			preview = preview,
+			preview = parent and comment_threads.render_comment(parent, math.max(math.floor(vim.o.columns * 0.7), 80)),
 			on_save = function(text)
 				if vim.trim(text) == "" then
 					notify(context, "warn", "Task cannot be empty")
@@ -351,6 +323,7 @@ local function remove_comment(context, comment)
 	for _, existing in ipairs(children) do
 		if not comment.is_task and tostring(existing.parent_id or "") == id then
 			comment.content_raw = ""
+			comment.content_display = nil
 			comment.state = "DELETED"
 			comment.pending = false
 			upsert_comment(context, comment)
@@ -406,6 +379,7 @@ M.edit_comment = {
 				end
 				notify(context, "loading", comment.is_task and "Editing task..." or "Editing comment...")
 				local desired = vim.tbl_extend("force", {}, comment, { content_raw = text })
+				desired.content_display = nil
 				local callback = function(updated, err)
 					if err then
 						notify(context, "error", "Edit failed: " .. err)
@@ -783,7 +757,8 @@ M.discard_review = {
 			return false
 		end
 		vim.ui.input({ prompt = "Discard pending review? [y/N]: " }, function(input)
-			if not input or not input:lower():match("^y") then
+			local confirmed = input and vim.trim(input):lower()
+			if confirmed ~= "y" and confirmed ~= "yes" then
 				return
 			end
 			notify(context, "loading", "Discarding review...")

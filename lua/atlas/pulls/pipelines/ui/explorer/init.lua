@@ -175,11 +175,7 @@ function M.reload_job(pane, selection, opts)
 	end)
 end
 
----@param pane PullsPipelinesExplorer
----@param selection PullsPipelinesSelection|nil
-function M.render(pane, selection)
-	renderer.render(pane, selection)
-end
+M.render = renderer.render
 
 ---@param pane PullsPipelinesExplorer
 local function begin_loading(pane)

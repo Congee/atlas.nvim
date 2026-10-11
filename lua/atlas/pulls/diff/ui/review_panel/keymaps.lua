@@ -86,7 +86,7 @@ function M.setup(state, callbacks)
 
 	local items = {}
 	add(items, "ui.close", "Close review panel", 101, close)
-	add(items, "pulls.review.view.toggle_review_panel", "Close review panel", 41, close)
+	add(items, "pulls.review.view.toggle_review_panel", "Close review panel", 102, close)
 	add(items, "ui.help", "Toggle help", 100, function()
 		help.toggle({ buffer = state.buf })
 	end)

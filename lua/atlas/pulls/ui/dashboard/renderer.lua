@@ -136,7 +136,7 @@ local function render_header(lines, spans, width)
 		if #actions > 0 then
 			table.insert(actions, { label = "|", hl_group = "AtlasTextMuted" })
 		end
-		local count = notif_state.unread_count or 0
+		local count = notif_state.unread_count
 		local bell, bell_hl = icons.general(count > 0 and "bell_unread" or "bell")
 		table.insert(actions, {
 			label = count > 0 and string.format("%s %d", bell, count) or bell,

@@ -64,11 +64,6 @@ end
 ---@param state RepositoryOverview
 local function load(state)
 	local repository = state.provider.capabilities.repository
-	if not repository then
-		state.details = "Repository details are not available"
-		render(state)
-		return
-	end
 	state.requests.cancel()
 	state.requests = requests.new()
 	state.details = "loading"
@@ -126,11 +121,11 @@ function M.open(opts)
 		end,
 	})
 	for _, buf in ipairs({ state.buf, state.sidebar_buf }) do
-		help.register("Overview", {
+		help.register("General", {
 			{
 				key = state.refresh_keys,
 				desc = "Reload overview",
-				index = 25,
+				index = 80,
 				callback = function()
 					load(state)
 				end,
@@ -139,7 +134,7 @@ function M.open(opts)
 			{
 				key = state.browser_keys,
 				desc = "Open repository in browser",
-				index = 33,
+				index = 4,
 				callback = function()
 					if state.repo.html_url then
 						vim.ui.open(state.repo.html_url)
@@ -147,7 +142,7 @@ function M.open(opts)
 				end,
 				opts = { nowait = true, silent = true },
 			},
-		}, { buffer = buf })
+		}, { buffer = buf, index = 1 })
 	end
 	render(state)
 end
@@ -161,7 +156,7 @@ function M.close(buf)
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
 	for _, buffer in ipairs({ state.buf, state.sidebar_buf }) do
-		help.remove("Overview", { { key = state.refresh_keys }, { key = state.browser_keys } }, { buffer = buffer })
+		help.remove("General", { { key = state.refresh_keys }, { key = state.browser_keys } }, { buffer = buffer })
 	end
 	if utils.window.valid(state.win) then
 		vim.wo[state.win].wrap = false

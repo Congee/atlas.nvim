@@ -37,6 +37,17 @@ function M.run(action, ctx, on_done)
 			return M.reject(ctx, on_done, tostring(reason or string.format("Action is not available: %s", action.id)))
 		end
 	end
+	if action.confirmation then
+		vim.ui.input({ prompt = action.label .. "? [y/N]: " }, function(input)
+			local answer = vim.trim(input or ""):lower()
+			if answer ~= "y" and answer ~= "yes" then
+				on_done(nil, nil)
+				return
+			end
+			action.run(ctx, on_done)
+		end)
+		return true
+	end
 	return action.run(ctx, on_done) ~= false
 end
 

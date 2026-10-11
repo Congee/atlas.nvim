@@ -19,7 +19,6 @@
 ---@field inline_thread boolean|nil
 
 local activity_api = require("atlas.pulls.providers.gitlab.api.activity")
-local mentions = require("atlas.providers.gitlab.mentions")
 local changes_api = require("atlas.pulls.providers.gitlab.api.changes")
 local checks_api = require("atlas.pulls.providers.gitlab.api.checks")
 local comments_api = require("atlas.pulls.providers.gitlab.api.comments")
@@ -27,11 +26,13 @@ local config = require("atlas.config")
 local detail_ui = require("atlas.pulls.providers.gitlab.ui.detail")
 local git = require("atlas.core.git")
 local links_api = require("atlas.providers.gitlab.links")
+local metadata_api = require("atlas.issues.providers.gitlab.api.metadata")
 local pullrequests_api = require("atlas.pulls.providers.gitlab.api.pullrequests")
 local reviews_api = require("atlas.pulls.providers.gitlab.api.reviews")
 local repository_ui = require("atlas.providers.gitlab.ui.repository")
 local gitlab_query = require("atlas.providers.gitlab.query")
 local request_scope = require("atlas.core.requests")
+local users_api = require("atlas.providers.gitlab.users")
 local GITLAB_REACTION_OPTIONS = require("atlas.ui.shared.emojis").gitlab()
 
 ---@return AtlasGitLabPullsViewConfig[]
@@ -104,29 +105,31 @@ return {
 	view_for_target = view_for_target,
 	resolve_search = gitlab_query.query,
 	capabilities = {
+		actions = require("atlas.pulls.providers.gitlab.actions.registry"),
 		core = {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = pullrequests_api.fetch_pullrequest,
 			fetch_links = links_api.fetch_pullrequest,
-			create_pr = pullrequests_api.create_pr,
 			fetch_reviewers = reviews_api.fetch_reviewers,
-			update_reviewers = pullrequests_api.update_reviewers,
 			merge = pullrequests_api.merge,
-			update_title = pullrequests_api.update_title,
-			update_description = pullrequests_api.update_description,
-			set_draft = pullrequests_api.set_draft,
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.fetch_description,
-			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
 		},
+		write = {
+			create = pullrequests_api.create_pr,
+			update = pullrequests_api.update_pr,
+			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
+			fetch_labels = metadata_api.list_labels,
+			fetch_assignees = function(repo_slug, on_done)
+				return users_api.list_members(repo_slug, nil, on_done)
+			end,
+		},
 		comments = {
 			reaction_options = GITLAB_REACTION_OPTIONS,
-			comment_completion = mentions.for_pulls,
-			-- comment_formatter = nil,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

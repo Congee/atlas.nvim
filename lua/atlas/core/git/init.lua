@@ -43,22 +43,54 @@ local function parse_progress(line)
 	return label and trim(label) or nil, percent and tonumber(percent) or nil
 end
 
+---@class AtlasGitRunOpts: vim.SystemOpts
+---@field console? boolean
+
 ---@param args string[] Arguments after `git`.
----@param opts vim.SystemOpts|nil
+---@param opts AtlasGitRunOpts|nil
 ---@param on_done fun(res: vim.SystemCompleted)
 ---@param on_progress (fun(label: string, percent: integer))|nil
 ---@return { cancel: fun() }
 function M.run(args, opts, on_done, on_progress)
 	local cancelled = false
-	local system_opts = opts or {}
+	local system_opts = vim.tbl_extend("force", {}, opts or {})
 	local command = vim.list_extend({ "git" }, args)
 	local context = { command = vim.tbl_map(redact, command), cwd = system_opts.cwd }
 	logger.loginfo("git", context)
+	---@type AtlasConsoleOutput|nil
+	local output
+	if system_opts.console then
+		local console = require("atlas.ui.console")
+		output = console.start(table.concat(context.command, " "), system_opts.cwd)
+		console.open(false, 300)
+	end
+	system_opts.console = nil
+	local stdout = {}
 	local stderr = {}
 	local pending = ""
 	local last_progress = ""
+	local console_pending = { stdout = "", stderr = "" }
 
-	local function report_progress(line)
+	---@param stream "stdout"|"stderr"
+	---@param data string|nil
+	local function write_output(stream, data)
+		if not output then
+			return
+		end
+		local text = console_pending[stream] .. (data or "")
+		local boundary = #text
+		if data then
+			boundary = text:match(".*()[\r\n]")
+		end
+		if boundary then
+			output:write(redact(text:sub(1, boundary)))
+			text = text:sub(boundary + 1)
+		end
+		console_pending[stream] = text
+	end
+
+	---@param report fun(label: string, percent: integer)
+	local function report_progress(line, report)
 		local label, percent = parse_progress(line)
 		if not label or percent == nil then
 			return
@@ -70,39 +102,65 @@ function M.run(args, opts, on_done, on_progress)
 		last_progress = progress
 		vim.schedule(function()
 			if not cancelled then
-				on_progress(label, percent)
+				report(label, percent)
 			end
 		end)
 	end
 
-	if on_progress then
-		system_opts = vim.tbl_extend("force", {}, system_opts)
+	if output then
+		system_opts.stdout = function(_, data)
+			if data then
+				table.insert(stdout, data)
+				write_output("stdout", data)
+			end
+		end
+	end
+
+	if on_progress or output then
 		system_opts.stderr = function(_, data)
 			if not data then
 				return
 			end
 			table.insert(stderr, data)
+			write_output("stderr", data)
+			if not on_progress then
+				return
+			end
 			pending = pending .. data
 			while true do
 				local boundary = pending:find("[\r\n]")
 				if not boundary then
 					break
 				end
-				report_progress(pending:sub(1, boundary - 1))
+				report_progress(pending:sub(1, boundary - 1), on_progress)
 				pending = pending:sub(boundary + 1)
 			end
 		end
 	end
 
 	local function finish(res)
-		if on_progress then
-			if pending ~= "" then
-				report_progress(pending)
+		if on_progress and pending ~= "" then
+			report_progress(pending, on_progress)
+		end
+		if output then
+			res.stdout = table.concat(stdout)
+			if system_opts.text then
+				res.stdout = res.stdout:gsub("\r\n", "\n")
 			end
-			res.stderr = #stderr > 0 and table.concat(stderr) or res.stderr
+		end
+		if on_progress or output then
+			res.stderr = #stderr > 0 and table.concat(stderr) or res.stderr or ""
+			if system_opts.text then
+				res.stderr = res.stderr:gsub("\r\n", "\n")
+			end
 		end
 		if not cancelled then
 			log_failure(res, context)
+			if output then
+				write_output("stdout", nil)
+				write_output("stderr", nil)
+				output:finish(res.code)
+			end
 		end
 		vim.schedule(function()
 			if not cancelled then
@@ -111,10 +169,14 @@ function M.run(args, opts, on_done, on_progress)
 		end)
 	end
 
-	local ok, handle = pcall(vim.system, command, system_opts, finish)
+	local ok, result = pcall(vim.system, command, system_opts, finish)
+	---@type vim.SystemObj|nil
+	local handle = ok and result or nil
 	if not ok then
-		finish({ code = -1, signal = 0, stdout = "", stderr = tostring(handle) })
-		handle = nil
+		if output then
+			output:write(redact(tostring(result)))
+		end
+		finish({ code = -1, signal = 0, stdout = "", stderr = tostring(result) })
 	end
 	return {
 		cancel = function()
@@ -122,6 +184,11 @@ function M.run(args, opts, on_done, on_progress)
 				return
 			end
 			cancelled = true
+			if output then
+				write_output("stdout", nil)
+				write_output("stderr", nil)
+				output:finish(nil)
+			end
 			if handle then
 				pcall(handle.kill, handle, 9)
 			end
@@ -162,7 +229,7 @@ function M.current_branch(root, on_done)
 		end
 		local branch = trim(res.stdout)
 		if branch == "HEAD" then
-			on_done(nil, "Detached HEAD — checkout a branch first")
+			on_done(nil, "Detached HEAD - checkout a branch first")
 			return
 		end
 		on_done(branch, nil)
@@ -365,18 +432,6 @@ function M.list_remote_branches(root, remote, on_done)
 end
 
 ---@param root string
----@param branch string
----@param remote string|nil
----@param on_done fun(exists: boolean)
----@return { cancel: fun() }
-function M.branch_exists_on_remote(root, branch, remote, on_done)
-	remote = remote or "origin"
-	return M.run({ "ls-remote", "--exit-code", "--heads", remote, branch }, { cwd = root, text = true }, function(res)
-		on_done(res.code == 0)
-	end)
-end
-
----@param root string
 ---@param on_done fun(inside: boolean)
 ---@return { cancel: fun() }
 function M.is_inside_work_tree(root, on_done)
@@ -389,18 +444,19 @@ end
 ---@param remote string
 ---@param refs string[]
 ---@param on_done fun(ok: boolean, err: string|nil)
----@param on_progress (fun(label: string, percent: integer))|nil
+---@param opts { console?: boolean, on_progress?: fun(label: string, percent: integer) }|nil
 ---@return { cancel: fun() }
-function M.fetch_refs(root, remote, refs, on_done, on_progress)
+function M.fetch_refs(root, remote, refs, on_done, opts)
+	opts = opts or {}
 	local args = { "fetch", "--no-tags", remote }
-	if on_progress then
+	if opts.on_progress or opts.console then
 		table.insert(args, 2, "--progress")
 	end
 	vim.list_extend(args, refs)
 
-	return M.run(args, { cwd = root, text = true }, function(res)
+	return M.run(args, { cwd = root, text = true, console = opts.console }, function(res)
 		on_done(command_result(res, string.format("git fetch failed with code %d", res.code)))
-	end, on_progress)
+	end, opts.on_progress)
 end
 
 ---@param root string
@@ -431,9 +487,13 @@ end
 ---@return { cancel: fun() }
 function M.push_branch(root, branch, remote, on_done)
 	remote = remote or "origin"
-	return M.run({ "push", "-u", remote, branch }, { cwd = root, text = true }, function(res)
-		on_done(command_result(res, string.format("git push failed with code %d", res.code)))
-	end)
+	return M.run(
+		{ "push", "--progress", "-u", remote, branch },
+		{ cwd = root, text = true, console = true },
+		function(res)
+			on_done(command_result(res, string.format("git push failed with code %d", res.code)))
+		end
+	)
 end
 
 return M

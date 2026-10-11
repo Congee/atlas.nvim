@@ -174,7 +174,6 @@ end
 ---@param scope AtlasRequestScope
 ---@param on_done fun(issues: Issue[], err: string|nil)
 local function fetch_missing_parents(provider, view, issues, force_refresh, scope, on_done)
-	local fetch = provider.capabilities.core.fetch_by_refs
 	if not relationships_enabled(view) then
 		on_done(issues, nil)
 		return
@@ -187,7 +186,7 @@ local function fetch_missing_parents(provider, view, issues, force_refresh, scop
 	end
 
 	scope.run(function(done)
-		return fetch(refs, { force_refresh = force_refresh }, done)
+		return provider.capabilities.core.fetch_by_refs(refs, { force_refresh = force_refresh }, done)
 	end, function(parents, err)
 		on_done(merge_issues(issues, parents), err)
 	end)
@@ -594,13 +593,11 @@ function M.apply_action_result(result)
 end
 
 ---@param issue Issue
----@return boolean, string|nil
 function M.update_issue(issue)
 	local updated = replace_issue(issue)
 	if updated then
 		render_if_active()
 	end
-	return updated, nil
 end
 
 function M.toggle_current_issue_collapsed()
@@ -635,7 +632,6 @@ function M.refresh_current_issue()
 end
 
 function M.dispose()
-	state.is_loading = false
 	cancel_active_requests()
 end
 

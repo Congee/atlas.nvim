@@ -7,6 +7,7 @@
 ---@field repository AtlasRepositoryCapability|nil
 ---@field notifications AtlasNotificationsCapability|nil
 ---@field users AtlasUsersCapability|nil
+---@field completion table<string, AtlasCompletionSource>|nil
 ---@field actions AtlasActionsCapability|nil
 
 ---@alias AtlasAction AtlasIssueAction|AtlasPullAction|PullsPipelineAction|AtlasDiffAction

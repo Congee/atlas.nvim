@@ -214,17 +214,20 @@ pulls = {
           return
         end
 
-        local output = ctx.output("Repository status")
-        output:write("Checking " .. ctx.repo_path)
-        output:run({ "git", "status", "--short" }, function(code)
-          if code ~= 0 then
+        local function write(_, data)
+          if data then ctx.write(data) end
+        end
+        vim.system({ "git", "status", "--short" }, {
+          cwd = ctx.repo_path,
+          stdout = write,
+          stderr = write,
+        }, function(result)
+          if result.code ~= 0 then
             done(false, "Failed to read repository status")
             return
           end
           done(true, "Repository status loaded")
-        end, {
-          cwd = ctx.repo_path,
-        })
+        end)
       end,
     },
   },
@@ -248,11 +251,11 @@ issues = {
 },
 ```
 
-Use `ctx.output(title)` to show output from a custom action:
+Use `ctx.write(text)` to show output and `done(ok, message)` to finish the action.
 
 ```lua
-output:write("Loading...")
-output:run(cmd, on_exit, { cwd = "/repo" })
+ctx.write("Running checks...\n")
+done(true, "Checks passed")
 ```
 
 </details>
@@ -360,6 +363,7 @@ Save searches as bookmarks, or press `*` to star a pull request or issue. Both a
 - `:Atlas notes [target]` - Inspect notes
 - `:Atlas clear [cache|notes|stars]` - Clear all Atlas data or only cached data and cloned repositories, notes, or starred items
 - `:Atlas logs` - Toggle Atlas logs
+- `:Atlas console` - Open the latest command output
 
 ## Pulls
 
@@ -374,6 +378,13 @@ pulls = {
   default_merge_method = "merge", -- "merge" or "squash".
   default_delete_source_branch = false,
   git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
+
+  description = {
+    include_summary = true,
+    include_commit_hashes = true,
+    include_related = true,
+    include_diffstat = false,
+  },
 
   -- Replaces the built-in Conventional Comments templates.
   comment_templates = {
@@ -864,8 +875,7 @@ keymaps = {
     open_diff = "gd",
     checkout = "gc",
     open_repository = "o",
-    edit_title = "T",
-    edit_description = "D",
+    edit_pr = "ge",
     review = {
       show_details = "K", -- File/commit details.
       toggle_file_reviewed = "-",

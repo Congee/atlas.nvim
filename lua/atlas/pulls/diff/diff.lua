@@ -53,7 +53,7 @@ end
 ---@param old string
 ---@param new string
 ---@return integer[][] split_hunks
-function M.compute_split(old, new)
+local function compute_split(old, new)
 	local flags = {}
 	for _, option in ipairs(vim.opt.diffopt:get()) do
 		flags[option] = true
@@ -94,7 +94,7 @@ end
 function M.compute(old, new)
 	local hunks = diff(old, new, { result_type = "indices", algorithm = "histogram" })
 	---@cast hunks integer[][]
-	return hunks, M.compute_split(old, new)
+	return hunks, compute_split(old, new)
 end
 
 return M

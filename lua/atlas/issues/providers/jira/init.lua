@@ -17,13 +17,13 @@
 ---@field display "chip"|"table"
 
 ---@class JiraIssueDetails : IssueDetails
+---@field type IssueType|nil
 ---@field status string|nil
 ---@field priority string|nil
 ---@field reporter AtlasUser|nil
 ---@field raw_description table|string|nil
 ---@field custom_fields JiraIssueCustomField[]
 
-local mentions = require("atlas.providers.jira.mentions")
 local comments_api = require("atlas.issues.providers.jira.api.comments")
 local config = require("atlas.config")
 local detail_ui = require("atlas.issues.providers.jira.ui.detail")
@@ -182,12 +182,12 @@ return {
 	view_for_target = view_for_target,
 	issue_ref = target_issue_ref,
 	capabilities = {
+		actions = require("atlas.issues.providers.jira.actions.registry"),
 		core = {
 			fetch_issues = fetch_issues,
 			fetch_by_refs = fetch_by_refs,
 			fetch_issue = issues_api.fetch_issue,
 			fetch_links = links_api.fetch,
-			-- update_description = nil,
 		},
 		comments = {
 			fetch_activity = function(issue, opts, on_done)
@@ -199,7 +199,6 @@ return {
 			delete_comment = delete_comment,
 			-- add_reaction = nil,
 			-- reaction_options = nil,
-			comment_completion = mentions.for_issues,
 		},
 		ui = {
 			detail = detail_ui,

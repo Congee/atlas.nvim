@@ -22,7 +22,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field group integer
----@field keymaps table<integer, AtlasHelpKeyItem[]>
+---@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
 
 local M = {
 	key = "releases",
@@ -194,10 +194,11 @@ end
 ---@param buf integer
 ---@param actions table[]
 local function register(state, buf, actions)
-	local items = {}
+	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
 		local keys = action.key
 		if keys and #keys > 0 then
+			local items = groups[action.group or "General"]
 			table.insert(items, {
 				key = keys,
 				desc = action.desc,
@@ -207,8 +208,9 @@ local function register(state, buf, actions)
 			})
 		end
 	end
-	state.keymaps[buf] = items
-	help.register("Releases", items, { buffer = buf })
+	state.keymaps[buf] = groups
+	help.register("General", groups.General, { buffer = buf, index = 1 })
+	help.register("Filters", groups.Filters, { buffer = buf, index = 2 })
 end
 
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
@@ -246,15 +248,16 @@ function M.open(opts)
 				state.releases = nil
 				load(state, state.selected_id)
 			end,
-			index = 25,
+			index = 80,
 		},
 		{
 			key = resolver.resolve("ui.search"),
 			desc = "Search releases",
+			group = "Filters",
 			callback = function()
 				search(state)
 			end,
-			index = 20,
+			index = 1,
 		},
 		{
 			key = resolver.resolve("ui.next_page"),
@@ -262,7 +265,7 @@ function M.open(opts)
 			callback = function()
 				change_release(state, 1)
 			end,
-			index = 11,
+			index = 16,
 		},
 		{
 			key = resolver.resolve("ui.previous_page"),
@@ -270,7 +273,7 @@ function M.open(opts)
 			callback = function()
 				change_release(state, -1)
 			end,
-			index = 10,
+			index = 15,
 		},
 	}
 	register(state, state.sidebar_buf, actions)
@@ -287,7 +290,7 @@ function M.open(opts)
 					vim.ui.open(entry.asset and entry.asset.url or entry.release.url)
 				end
 			end,
-			index = 33,
+			index = 4,
 		},
 		{
 			key = resolver.resolve("ui.copy_id"),
@@ -299,7 +302,7 @@ function M.open(opts)
 					notify.success("Copied " .. entry.release.tag)
 				end
 			end,
-			index = 40,
+			index = 8,
 		},
 		{
 			key = resolver.resolve("ui.copy_url"),
@@ -311,7 +314,7 @@ function M.open(opts)
 					notify.success("Copied URL")
 				end
 			end,
-			index = 41,
+			index = 9,
 		},
 	})
 	register(state, state.buf, actions)
@@ -334,8 +337,10 @@ function M.close(buf)
 	state.spinner:stop()
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
-	for buffer, items in pairs(state.keymaps) do
-		help.remove("Releases", items, { buffer = buffer })
+	for buffer, groups in pairs(state.keymaps) do
+		for group, items in pairs(groups) do
+			help.remove(group, items, { buffer = buffer })
+		end
 	end
 	if utils.window.valid(state.win) then
 		vim.wo[state.win].wrap = false

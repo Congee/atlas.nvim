@@ -7,6 +7,7 @@ local explorer = require("atlas.pulls.pipelines.ui.explorer")
 local keymaps = require("atlas.pulls.pipelines.ui.keymaps")
 local logs = require("atlas.pulls.pipelines.ui.logs")
 local icons = require("atlas.ui.shared.icons")
+local pipeline_utils = require("atlas.pulls.pipelines.utils")
 local statusline = require("atlas.ui.statusline")
 local utils = require("atlas.ui.shared.utils")
 
@@ -75,8 +76,7 @@ local function update_statusline(session)
 	local job = session.logs.selection and session.logs.selection.job
 	if job then
 		if job.duration then
-			local duration = job.duration < 60 and string.format("%ds", math.floor(job.duration))
-				or utils.human_duration(job.duration)
+			local duration = pipeline_utils.format_duration(job.duration)
 			items[#items + 1] = {
 				text = icons.general("updated") .. " " .. duration,
 				hl_group = "AtlasFooterText",

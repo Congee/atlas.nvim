@@ -5,24 +5,6 @@ local icons = require("atlas.ui.shared.icons")
 local activity = require("atlas.ui.components.activity")
 local helper = require("atlas.issues.ui.presentation")
 
----@param actor AtlasUser|nil
----@return string
-local function actor_name(actor)
-	if actor == nil then
-		return "Unknown"
-	end
-	if actor.name and actor.name ~= "" then
-		return actor.name
-	end
-	if actor.username and actor.username ~= "" then
-		return actor.username
-	end
-	if actor.id and actor.id ~= "" then
-		return actor.id
-	end
-	return "Unknown"
-end
-
 local EVENT_ICON = {
 	labeled = { icons.pulls("activity") },
 	unlabeled = { icons.pulls("activity") },
@@ -45,7 +27,7 @@ local EVENT_ICON = {
 
 ---@param entry IssueActivityEntry
 ---@return { icon: string, icon_hl: string, additional: string, content: string|nil }
-function M.classify(entry)
+local function classify(entry)
 	local raw = tostring(entry.label or "")
 	local style = EVENT_ICON[entry.kind] or { icons.pulls("activity") }
 	return {
@@ -62,8 +44,8 @@ end
 local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
-		local classified = M.classify(e)
-		local author = actor_name(e.actor)
+		local classified = classify(e)
+		local author = helper.person_name(e.actor)
 		items[#items + 1] = {
 			icon = classified.icon,
 			icon_hl = classified.icon_hl,

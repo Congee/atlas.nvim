@@ -10,7 +10,6 @@
 ---@field labels PullsLabel[]
 
 local activity_api = require("atlas.pulls.providers.github.api.activity")
-local mentions = require("atlas.providers.github.mentions")
 local changes_api = require("atlas.pulls.providers.github.api.changes")
 local checks_api = require("atlas.pulls.providers.github.api.checks")
 local config = require("atlas.config")
@@ -24,6 +23,7 @@ local request_scope = require("atlas.core.requests")
 local search_query = require("atlas.providers.github.query")
 local ui_detail = require("atlas.pulls.providers.github.ui.detail")
 local ui_repository = require("atlas.providers.github.ui.repository")
+local users_api = require("atlas.providers.github.users")
 
 ---@param ref PullRequestRef
 ---@param opts PullsFetchOpts
@@ -111,29 +111,31 @@ return {
 	view_for_target = view_for_target,
 	resolve_search = search_query.query,
 	capabilities = {
+		actions = require("atlas.pulls.providers.github.actions.registry"),
 		core = {
 			fetch_pullrequests = fetch_pullrequests,
 			fetch_by_refs = pullrequests_api.fetch_by_refs,
 			fetch_pullrequest = fetch_pullrequest,
 			fetch_links = links_api.fetch_pr,
-			create_pr = pullrequests_api.create_pr,
-			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
 			fetch_reviewers = reviews_api.fetch_reviewers,
-			update_reviewers = pullrequests_api.update_reviewers,
 			merge = pullrequests_api.merge,
-			update_title = pullrequests_api.update_title,
-			update_description = pullrequests_api.update_description,
-			set_draft = pullrequests_api.set_draft,
 			decline = pullrequests_api.decline,
 			fetch_description = pullrequests_api.get_description,
 			fetch_merge_checks = checks_api.fetch,
 			fetch_diffstat = changes_api.fetch_diffstat,
 			fetch_commits = changes_api.fetch_commits,
 		},
+		write = {
+			create = pullrequests_api.create_pr,
+			update = pullrequests_api.update_pr,
+			fetch_reviewer_candidates = pullrequests_api.fetch_reviewer_candidates,
+			fetch_labels = pullrequests_api.list_labels,
+			fetch_assignees = function(repo_slug, on_done)
+				return users_api.get_assignable_users(repo_slug, nil, on_done)
+			end,
+		},
 		comments = {
 			reaction_options = emojis.github(),
-			comment_completion = mentions.for_pulls,
-			-- comment_formatter = nil,
 			fetch_conversation = activity_api.fetch_conversation,
 			add_comment = comments_api.add_comment,
 			edit_comment = comments_api.edit_comment,

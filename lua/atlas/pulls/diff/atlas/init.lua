@@ -360,18 +360,6 @@ local function get_selection(view)
 	local file = document.file
 	local side = (left or file.status == "deleted") and "LEFT" or "RIGHT"
 	local lines = side == "LEFT" and document.contents.old.lines or document.contents.new.lines
-	local first = vim.api.nvim_win_get_cursor(win)[1]
-	local last = first
-	local mode = vim.fn.mode()
-	if mode == "v" or mode == "V" or mode == "\22" then
-		first = vim.fn.line("v")
-		first, last = math.min(first, last), math.max(first, last)
-		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
-	end
-
-	if last > #lines then
-		return nil, "The selected lines are outside the file"
-	end
 
 	local function position(line)
 		local from = side == "LEFT" and line or nil
@@ -390,20 +378,7 @@ local function get_selection(view)
 		return { from = from, to = to }
 	end
 
-	local inline = position(last)
-	if first ~= last then
-		local start = position(first)
-		if (start.to ~= nil) ~= (inline.to ~= nil) then
-			return nil, "The selected lines cannot be represented as one review range"
-		end
-		inline.start_from = start.from
-		inline.start_to = start.to
-	end
-	inline.path = file.path
-	inline.old_path = file.old_path
-	inline.commit_hash = view.result.head_revision
-
-	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
+	return annotation_ui.selection(view, file, side, lines, position)
 end
 
 local function setup_autocmds(view)

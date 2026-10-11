@@ -46,14 +46,6 @@ local function build_query(pagelen, query)
 	return table.concat(parts, "&")
 end
 
----@param pr PullRequest
----@param action "merge"|"decline"
----@return boolean
-function M.has_action(pr, action)
-	---@cast pr BitbucketPullRequest
-	return tostring(pr.links[action] or "") ~= ""
-end
-
 ---@param repo_full_name string
 ---@param url string
 ---@param opts { force_refresh: boolean, pagelen: number }
@@ -87,7 +79,7 @@ local function fetch_page(repo_full_name, url, opts, on_done)
 			next_url = next_url,
 			total_pages = size and math.max(1, math.ceil(size / opts.pagelen)) or nil,
 		}
-		service.set_persistent_cache(key, page, service.cache_ttl())
+		service.set_persistent_cache(key, page)
 		on_done(page, nil)
 	end, { action = "Fetch pull requests", workspace = workspace, repo = repo })
 end
@@ -155,7 +147,7 @@ end
 ---@param opts { force_refresh: boolean, pagelen: number, query: string }
 ---@param on_done fun(page: PullsPage, err: string[]|nil)
 ---@return { cancel: fun() }|nil
-function M.fetch_for_repositories(repos, opts, on_done)
+local function fetch_for_repositories(repos, opts, on_done)
 	local urls = {}
 	local query = build_query(opts.pagelen, opts.query)
 	for _, repo in ipairs(repos) do
@@ -179,7 +171,7 @@ function M.fetch_for_targets(targets, opts, on_done)
 		return repositories_api.resolve_targets(targets, opts, done)
 	end, function(repos, errors)
 		requests.run(function(done)
-			return M.fetch_for_repositories(repos, opts, done)
+			return fetch_for_repositories(repos, opts, done)
 		end, function(page, fetch_errors)
 			vim.list_extend(errors, fetch_errors or {})
 			on_done(page, #errors > 0 and errors or nil)
@@ -284,7 +276,7 @@ function M.fetch_pullrequest(ref, opts, on_done)
 			description = json.safe_str(result.description) or "",
 			close_source_branch = json.nilify(result.close_source_branch),
 		}
-		service.set_cache(key, details, service.cache_ttl())
+		service.set_cache(key, details)
 		on_done(details, nil)
 	end, { action = "Fetch pull request details", repo = ref.repo_full_name, id = ref.id })
 end
@@ -356,6 +348,30 @@ end
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.set_draft(pr, draft, on_done)
 	return update_pullrequest(pr, { draft = draft }, on_done)
+end
+
+---@param pr PullRequest
+---@param opts PullsUpdatePROpts
+---@param on_done fun(ok: boolean, err: string|nil)
+---@return { job_id: integer, cancel: fun() }|nil
+function M.update_pr(pr, opts, on_done)
+	local payload = {
+		title = opts.title,
+		description = opts.body,
+		draft = opts.draft,
+	}
+
+	if opts.base then
+		payload.destination = { branch = { name = opts.base } }
+	end
+	if opts.reviewers then
+		payload.reviewers = {}
+		for _, reviewer in ipairs(opts.reviewers) do
+			payload.reviewers[#payload.reviewers + 1] = { uuid = reviewer.provider_id }
+		end
+	end
+
+	return update_pullrequest(pr, payload, on_done)
 end
 
 ---@param pr PullRequest
@@ -465,8 +481,8 @@ function M.fetch_reviewers(pr, opts, on_done)
 end
 
 ---@param pr PullRequest
----@param selected PullsCreatePRReviewer[]
----@param _ PullsCreatePRReviewer[]
+---@param selected PullsReviewerCandidate[]
+---@param _ PullsReviewerCandidate[]
 ---@param on_done fun(ok: boolean, err: string|nil)
 ---@return { job_id: integer, cancel: fun() }|nil
 function M.update_reviewers(pr, selected, _, on_done)
@@ -506,7 +522,7 @@ function M.create_pr(opts, on_done)
 		draft = opts.draft == true,
 	}
 
-	if opts.reviewers and #opts.reviewers > 0 then
+	if opts.reviewers then
 		local list = {}
 		for _, reviewer in ipairs(opts.reviewers) do
 			table.insert(list, { uuid = reviewer.provider_id })
@@ -534,8 +550,8 @@ function M.create_pr(opts, on_done)
 	})
 end
 
----@param opts { repo_slug: string, repo_root: string|nil, head: string, base: string, pr: PullRequest|nil }
----@param on_done fun(reviewers: PullsCreatePRReviewer[]|nil, err: string|nil)
+---@param opts { repo_slug: string, pr: PullRequest|nil }
+---@param on_done fun(reviewers: PullsReviewerCandidate[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.fetch_reviewer_candidates(opts, on_done)
 	local slug = tostring(opts.repo_slug or "")
@@ -592,10 +608,8 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				local is_selected = opts.pr == nil or selected[uuid] == true
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
-					user_id = tostring(user.account_id or uuid),
 					provider_id = uuid,
 					selected = is_selected,
-					default = true,
 				})
 			end
 		end
@@ -607,7 +621,6 @@ function M.fetch_reviewer_candidates(opts, on_done)
 				local name = tostring(reviewer.name or "")
 				table.insert(reviewers, {
 					label = nickname ~= "" and ("@" .. nickname) or (name ~= "" and name or uuid),
-					user_id = reviewer.id,
 					provider_id = uuid,
 					selected = true,
 				})

@@ -162,17 +162,20 @@ to your own tooling. They appear in the action menu (default `A`).
             return
           end
 
-          local output = ctx.output("Repository status")
-          output:write("Checking " .. ctx.repo_path)
-          output:run({ "git", "status", "--short" }, function(code)
-            if code ~= 0 then
+          local function write(_, data)
+            if data then ctx.write(data) end
+          end
+          vim.system({ "git", "status", "--short" }, {
+            cwd = ctx.repo_path,
+            stdout = write,
+            stderr = write,
+          }, function(result)
+            if result.code ~= 0 then
               done(false, "Failed to read repository status")
               return
             end
             done(true, "Repository status loaded")
-          end, {
-            cwd = ctx.repo_path,
-          })
+          end)
         end,
       },
     },
@@ -196,10 +199,10 @@ to your own tooling. They appear in the action menu (default `A`).
   }
 <
 
-Use `ctx.output(title)` to show output from a custom action:
+Use `ctx.write(text)` to show output and `done(ok, message)` to finish the action.
 >lua
-  output:write("Loading...")
-  output:run(cmd, on_exit, { cwd = "/repo" })
+  ctx.write("Running checks...\n")
+  done(true, "Checks passed")
 <
 
 ==============================================================================
@@ -256,6 +259,9 @@ Use `ctx.output(title)` to show output from a custom action:
 :Atlas logs
         Toggle the Atlas log buffer.
 
+:Atlas console
+        Open the latest command output.
+
 ==============================================================================
 5. PULLS                                                          *atlas-pulls*
 
@@ -272,6 +278,12 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
       default_merge_method = "merge", -- "merge" or "squash"
       default_delete_source_branch = false,
       git_transport = "https", -- "https" or "ssh" for Atlas-managed Git remotes.
+      description = {
+        include_summary = true,
+        include_commit_hashes = true,
+        include_related = true,
+        include_diffstat = false,
+      },
       -- Replaces the built-in Conventional Comments templates.
       comment_templates = {
         insert_mode = true, -- enter Insert mode after applying a template
@@ -749,8 +761,7 @@ Atlas emits these `User` events after setup or cleanup completes:
         open_diff              = "gd",
         checkout               = "gc",
         open_repository        = "o",
-        edit_title             = "T",
-        edit_description       = "D",
+        edit_pr                = "ge",
         pipelines = {
           next_job             = { "]j", "<Tab>" },
           previous_job         = { "[j", "<S-Tab>" },

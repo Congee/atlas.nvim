@@ -50,15 +50,13 @@ end
 ---@param line_map table<integer, table>
 ---@param task PullsComment
 ---@param width integer
----@param format_text (fun(text: string): string)|nil
-local function emit_task(lines, spans, line_map, task, width, format_text)
+local function emit_task(lines, spans, line_map, task, width)
 	local task_lines, task_spans, task_map = comment_threads.render_task_compact(
 		{ comment = task, children = {} },
 		width,
 		{
 			padding_x = PADDING_X,
 			show_task_label = false,
-			format_text = format_text,
 		}
 	)
 	local offset = #lines
@@ -73,8 +71,7 @@ end
 ---@param line_map table<integer, table>
 ---@param nodes AtlasCommentThreadNode[]
 ---@param width integer
----@param format_text (fun(text: string): string)|nil
-local function emit_comments(lines, spans, line_map, nodes, width, format_text)
+local function emit_comments(lines, spans, line_map, nodes, width)
 	local provider = detail.provider
 	local comments = provider and provider.capabilities.comments
 	local tasks = provider and provider.capabilities.tasks
@@ -92,7 +89,6 @@ local function emit_comments(lines, spans, line_map, nodes, width, format_text)
 			toggle_resolved = action_key("pulls.review.toggle_resolved"),
 		},
 		reaction_options = comments and comments.reaction_options,
-		format_text = format_text,
 	})
 	local result = box.render({ { lines = thread_lines, spans = thread_spans, line_map = thread_map } }, {
 		width = width,
@@ -133,8 +129,7 @@ end
 ---@param width integer
 ---@param thread AtlasCommentThreadNode
 ---@param show_file_header boolean
----@param format_text (fun(text: string): string)|nil
-local function emit_thread(lines, spans, line_map, width, thread, show_file_header, format_text)
+local function emit_thread(lines, spans, line_map, width, thread, show_file_header)
 	local comment = thread.comment
 	local position = comment.file or comment.inline
 	if position then
@@ -155,28 +150,20 @@ local function emit_thread(lines, spans, line_map, width, thread, show_file_head
 			line_map[offset + line] = entry
 		end
 	end
-	emit_comments(lines, spans, line_map, { thread }, width, format_text)
+	emit_comments(lines, spans, line_map, { thread }, width)
 end
 
 ---@param width integer
 ---@param comments PullsComment[]|"loading"|string|nil
----@param tasks PullsComment[]|"loading"|string|nil
----@param format_text (fun(text: string): string)|nil
+---@param tasks PullsComment[]|nil
 ---@return string[], table[], table<integer, table>
-function M.render(width, comments, tasks, format_text)
+function M.render(width, comments, tasks)
 	local lines = {}
 	local spans = {}
 	local line_map = {}
 	local max_width = math.max(1, width)
 
-	if tasks == "loading" then
-		utils.push(lines, spans, spinner.with_text("Loading tasks..."), "AtlasTextMuted", PADDING_X)
-		table.insert(lines, "")
-	elseif type(tasks) == "string" then
-		utils.push(lines, spans, tasks, "AtlasLogError", PADDING_X)
-		table.insert(lines, "")
-	elseif type(tasks) == "table" and #tasks > 0 then
-		---@cast tasks PullsComment[]
+	if tasks and #tasks > 0 then
 		local sorted_tasks = vim.list_extend({}, tasks)
 		table.sort(sorted_tasks, function(left, right)
 			local left_date = tostring(left.created_on or "")
@@ -185,7 +172,7 @@ function M.render(width, comments, tasks, format_text)
 		end)
 		utils.push(lines, spans, task_heading(sorted_tasks), "AtlasColumnHeader", PADDING_X)
 		for _, task in ipairs(sorted_tasks) do
-			emit_task(lines, spans, line_map, task, max_width, format_text)
+			emit_task(lines, spans, line_map, task, max_width)
 		end
 		table.insert(lines, "")
 	end
@@ -205,7 +192,7 @@ function M.render(width, comments, tasks, format_text)
 	end
 
 	---@cast comments PullsComment[]
-	local roots = review_actions.group_comments(comments, type(tasks) == "table" and tasks or nil)
+	local roots = review_actions.group_comments(comments, tasks)
 	local groups, by_path = {}, {}
 	for _, thread in ipairs(roots) do
 		if not thread.comment.is_task then
@@ -225,7 +212,7 @@ function M.render(width, comments, tasks, format_text)
 	end
 	for _, group in ipairs(groups) do
 		for index, thread in ipairs(vim.list_extend(group.file_comments, group.other_comments)) do
-			emit_thread(lines, spans, line_map, max_width, thread, index == 1, format_text)
+			emit_thread(lines, spans, line_map, max_width, thread, index == 1)
 			table.insert(lines, "")
 		end
 	end

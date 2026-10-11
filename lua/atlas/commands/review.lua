@@ -128,18 +128,8 @@ function M.open(url)
 		return
 	end
 	requests.run(function(done)
-		return git.repo_root(nil, done)
-	end, function(root)
-		if not root then
-			no_repository()
-			return
-		end
-		requests.run(function(done)
-			return git.local_repository(root, done)
-		end, function(info)
-			open_repository(info)
-		end)
-	end)
+		return git.local_repository(nil, done)
+	end, open_repository)
 end
 
 return M

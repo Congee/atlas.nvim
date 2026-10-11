@@ -15,9 +15,8 @@ local function item(action_id, map_item)
 	if keys == nil then
 		return nil
 	end
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param action_id AtlasKeymapActionId|string
@@ -80,7 +79,7 @@ function M.setup(buf, refresh)
 			end,
 		})
 	end
-	help.register("Detail", items, { index = 212, buffer = buf })
+	help.register("Detail", items, { index = 2, buffer = buf })
 end
 
 ---@param buf integer

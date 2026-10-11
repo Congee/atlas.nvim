@@ -31,7 +31,6 @@ local M = {}
 
 ---@class AtlasProviderDomain
 ---@field module string
----@field actions string
 ---@field icon AtlasIconStyle|nil
 ---@field bookmark_key string|nil
 ---@field bookmark_label string|nil
@@ -85,9 +84,6 @@ function M.load(id, domain)
 	local implementation = require(provider_domain.module)
 	for name, capability in pairs(provider.capabilities or {}) do
 		implementation.capabilities[name] = capability
-	end
-	if implementation.capabilities.actions == nil then
-		implementation.capabilities.actions = require(provider_domain.actions)
 	end
 	implementation.id = id
 	implementation.name = provider.name

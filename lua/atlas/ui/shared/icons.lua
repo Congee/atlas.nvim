@@ -51,6 +51,7 @@ local ICONS = {
 		fork = { icon = "", hl_group = "AtlasLogInfo" },
 		repo = { icon = "", hl_group = "AtlasTextMuted" },
 		pr = { icon = "", hl_group = "AtlasTextPositive" },
+		draft_pr = { icon = "", hl_group = "AtlasPRDraft" },
 		merged_pr = { icon = "", hl_group = "AtlasPRMerged" },
 		declined_pr = { icon = "", hl_group = "AtlasPRDeclined" },
 		tasks = { icon = "󰘽", hl_group = "AtlasTextWarning" },
@@ -218,7 +219,7 @@ function M.issues_type(name)
 	if style then
 		return style.icon or "", style.hl_group or "AtlasTextMuted"
 	end
-	local hl_group = require("atlas.ui.shared.highlights").dynamic_for(key ~= "" and ("jira-issue-type:" .. key) or nil)
+	local hl_group = require("atlas.ui.highlights").dynamic_for(key ~= "" and ("jira-issue-type:" .. key) or nil)
 	return "", hl_group or "AtlasTextMuted"
 end
 

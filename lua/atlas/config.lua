@@ -32,6 +32,12 @@
 ---@field merge_method "merge"|"squash"|nil
 ---@field delete_source_branch boolean|nil
 
+---@class AtlasPullsDescriptionConfig
+---@field include_summary boolean|nil
+---@field include_commit_hashes boolean|nil
+---@field include_related boolean|nil
+---@field include_diffstat boolean|nil
+
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
@@ -78,7 +84,7 @@
 ---@field repo_path string|nil
 ---@field pr PullRequest
 ---@field user AtlasUser|nil
----@field output fun(title: string): AtlasLiveOutput
+---@field write fun(text: string)
 
 ---@class AtlasPullsCustomAction
 ---@field id string
@@ -98,6 +104,7 @@
 ---@class AtlasPullsConfig
 ---@field git_transport AtlasGitTransport|nil Git transport for Atlas-managed repositories (default: "https").
 ---@field repo_config AtlasPullsRepoConfig|nil
+---@field description AtlasPullsDescriptionConfig|nil
 ---@field diff AtlasPullsDiffConfig|nil
 ---@field delete_notes boolean|nil
 ---@field default_merge_method "merge"|"squash"|nil
@@ -111,7 +118,7 @@
 ---@class AtlasIssuesCustomActionContext
 ---@field issue Issue|nil
 ---@field user AtlasUser|nil
----@field output fun(title: string): AtlasLiveOutput
+---@field write fun(text: string)
 
 ---@class AtlasIssuesCustomAction
 ---@field id string
@@ -159,6 +166,12 @@ local defaults = {
 		delete_notes = false,
 		default_merge_method = "merge",
 		default_delete_source_branch = false,
+		description = {
+			include_summary = true,
+			include_commit_hashes = true,
+			include_related = true,
+			include_diffstat = false,
+		},
 		comment_templates = {
 			insert_mode = true,
 			items = {
@@ -274,8 +287,7 @@ local defaults = {
 			open_diff = "gd",
 			checkout = "gc",
 			open_repository = "o",
-			edit_title = "T",
-			edit_description = "D",
+			edit_pr = "ge",
 			pipelines = {
 				next_job = { "]j", "<Tab>" },
 				previous_job = { "[j", "<S-Tab>" },

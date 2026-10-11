@@ -3,21 +3,7 @@ local M = {}
 local utils = require("atlas.ui.shared.utils")
 local icons = require("atlas.ui.shared.icons")
 local activity = require("atlas.ui.components.activity")
-
----@param actor {nickname:string?, name:string?}|nil
----@return string
-local function actor_name(actor)
-	if actor == nil then
-		return "Unknown"
-	end
-	if actor.nickname and actor.nickname ~= "" then
-		return actor.nickname
-	end
-	if actor.name and actor.name ~= "" then
-		return actor.name
-	end
-	return "Unknown"
-end
+local presentation = require("atlas.pulls.ui.presentation")
 
 local EVENT = {
 	approval = icons.pulls_status("successful"),
@@ -39,19 +25,24 @@ local EVENT = {
 	review_requested = icons.general("user"),
 	renamed = icons.general("edit"),
 	ready_for_review = icons.pulls("pr"),
-	convert_to_draft = icons.pulls("activity"),
+	convert_to_draft = icons.pulls("draft_pr"),
 	update = icons.pulls("activity"),
 }
 
 ---@param entry PullsActivityEntry
----@return { icon: string, icon_hl: string|nil, additional: string, content: string|nil }
-function M.classify(entry)
+---@return { icon: string, icon_hl: string|nil, additional: string, additional_hl: string, content: string|nil }
+local function classify(entry)
 	local icon = EVENT[entry.kind] or icons.pulls("activity")
 	local icon_hl = "AtlasTextMuted"
+	local additional_hl = "AtlasTextMuted"
 	if entry.kind == "approval" then
 		icon_hl = "AtlasTextPositive"
+		additional_hl = "AtlasTextPositive"
 	elseif entry.kind == "changes_requested" then
 		icon_hl = "AtlasTextWarning"
+		additional_hl = "AtlasTextWarning"
+	elseif entry.kind == "unapproval" then
+		additional_hl = "AtlasTextWarning"
 	end
 	local label = tostring(entry.label or "")
 	local body = entry.body
@@ -62,6 +53,7 @@ function M.classify(entry)
 		icon = icon,
 		icon_hl = icon_hl,
 		additional = label ~= "" and label or entry.kind,
+		additional_hl = additional_hl,
 		content = body,
 	}
 end
@@ -72,20 +64,14 @@ end
 local function to_thread_items(entries, run_id)
 	local items = {}
 	for _, e in ipairs(entries) do
-		local classified = M.classify(e)
-		local additional_hl = "AtlasTextMuted"
-		if e.kind == "approval" then
-			additional_hl = "AtlasTextPositive"
-		elseif e.kind == "unapproval" or e.kind == "changes_requested" then
-			additional_hl = "AtlasTextWarning"
-		end
+		local classified = classify(e)
 
 		items[#items + 1] = {
 			icon = classified.icon,
 			icon_hl = classified.icon_hl,
-			author = actor_name(e.actor),
+			author = presentation.author_name(e.actor),
 			right_text = { { utils.relative_time(e.date), "AtlasTextMuted" } },
-			additional = { { classified.additional, additional_hl } },
+			additional = { { classified.additional, classified.additional_hl } },
 			content = classified.content,
 			line_map = {
 				kind = "activity",

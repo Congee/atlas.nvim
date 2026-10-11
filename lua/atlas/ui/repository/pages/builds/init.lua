@@ -25,7 +25,7 @@ local utils = require("atlas.ui.shared.utils")
 ---@field requests AtlasRequestScope
 ---@field spinner SpinnerInstance
 ---@field group integer
----@field keymaps table<integer, AtlasHelpKeyItem[]>
+---@field keymaps table<integer, table<string, AtlasHelpKeyItem[]>>
 
 local M = { key = "builds", label = "Builds", icon = icons.pulls("pipeline") }
 local namespace = vim.api.nvim_create_namespace("atlas.repository.builds")
@@ -176,9 +176,10 @@ end
 ---@param buf integer
 ---@param actions table[]
 local function register(state, buf, actions)
-	local items = {}
+	local groups = { General = {}, Filters = {} }
 	for _, action in ipairs(actions) do
 		if action.key and #action.key > 0 then
+			local items = groups[action.group or "General"]
 			items[#items + 1] = {
 				key = action.key,
 				desc = action.desc,
@@ -188,8 +189,9 @@ local function register(state, buf, actions)
 			}
 		end
 	end
-	state.keymaps[buf] = items
-	help.register("Builds", items, { buffer = buf })
+	state.keymaps[buf] = groups
+	help.register("General", groups.General, { buffer = buf, index = 1 })
+	help.register("Filters", groups.Filters, { buffer = buf, index = 2 })
 end
 
 ---@param opts { buf: integer, win: integer, sidebar_buf: integer, repo: AtlasRepositoryDetails, provider: PullsProvider|IssuesProvider, statusline: AtlasStatusline }
@@ -227,15 +229,16 @@ function M.open(opts)
 			callback = function()
 				load(state)
 			end,
-			index = 25,
+			index = 80,
 		},
 		{
 			key = "b",
 			desc = "Change build branch",
+			group = "Filters",
 			callback = function()
 				change_branch(state)
 			end,
-			index = 20,
+			index = 1,
 		},
 	}
 	register(state, state.sidebar_buf, actions)
@@ -253,7 +256,7 @@ function M.open(opts)
 					}, state.provider)
 				end
 			end,
-			index = 30,
+			index = 1,
 		},
 		{
 			key = resolver.resolve("ui.open_in_browser"),
@@ -266,7 +269,7 @@ function M.open(opts)
 					notify.info("This build has no browser URL")
 				end
 			end,
-			index = 33,
+			index = 4,
 		},
 	})
 	register(state, state.buf, actions)
@@ -291,8 +294,10 @@ function M.close(buf)
 	state.spinner:stop()
 	state.statusline:clear_notice()
 	vim.api.nvim_del_augroup_by_id(state.group)
-	for buffer, items in pairs(state.keymaps) do
-		help.remove("Builds", items, { buffer = buffer })
+	for buffer, groups in pairs(state.keymaps) do
+		for group, items in pairs(groups) do
+			help.remove(group, items, { buffer = buffer })
+		end
 	end
 	if utils.buffer.valid(state.buf) then
 		vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)

@@ -1,6 +1,7 @@
 local M = {}
 
 local help = require("atlas.ui.popups.help")
+local detail_ui = require("atlas.ui.detail")
 local resolver = require("atlas.core.keymaps")
 local utils = require("atlas.ui.shared.utils")
 local state = require("atlas.pulls.ui.detail.state")
@@ -9,6 +10,22 @@ local notify = require("atlas.core.notify")
 local links = require("atlas.ui.links")
 
 local registrations = {}
+
+---@param lnum integer
+---@return boolean
+local function is_selectable(lnum)
+	local entry = state.line_map[lnum]
+	if entry == nil then
+		return false
+	end
+
+	local tab_mod = state.tab_module(state.current_tab)
+	if tab_mod and tab_mod.is_selectable_line then
+		return tab_mod.is_selectable_line(lnum, entry)
+	end
+
+	return true
+end
 
 ---@param pr PullRequest
 ---@param buf integer|nil
@@ -43,15 +60,6 @@ local function complete_action(pr, on_update, result)
 	end
 end
 
----@return PullsDetailTabModule|nil
-local function current_tab_mod()
-	for _, tab in ipairs(state.tabs) do
-		if tab.key == state.current_tab then
-			return tab.mod
-		end
-	end
-end
-
 ---@param action_id string
 ---@return boolean
 local function supports_action(action_id)
@@ -73,9 +81,8 @@ local function item(action_id, map_item)
 		return nil
 	end
 
-	local out = vim.tbl_deep_extend("force", {}, map_item)
-	out.key = #keys == 1 and keys[1] or keys
-	return out
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@return boolean
@@ -92,7 +99,7 @@ local function open_current_line()
 		return false
 	end
 
-	local tab_mod = current_tab_mod()
+	local tab_mod = state.tab_module(state.current_tab)
 	if tab_mod and tab_mod.on_enter then
 		return tab_mod.on_enter(pr, entry) == true
 	end
@@ -102,7 +109,21 @@ end
 ---@param buf integer
 function M.register(buf)
 	local items = {}
-	local nav = require("atlas.pulls.ui.detail.navigation")
+	local function run_pr_action(action_id)
+		return function()
+			local pr = state.current_pr
+			if pr == nil then
+				return
+			end
+			local current = action_context(pr)
+			if current then
+				local on_update = state.on_update
+				actions.run(action_id, current, function(result)
+					complete_action(pr, on_update, result)
+				end)
+			end
+		end
+	end
 
 	utils.insert_if(
 		items,
@@ -111,7 +132,7 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				nav.move_cursor("down")
+				detail_ui.move_cursor("down", is_selectable)
 			end,
 		})
 	)
@@ -122,7 +143,7 @@ function M.register(buf)
 			opts = { nowait = true, silent = true },
 			hidden = true,
 			callback = function()
-				nav.move_cursor("up")
+				detail_ui.move_cursor("up", is_selectable)
 			end,
 		})
 	)
@@ -130,7 +151,7 @@ function M.register(buf)
 		items,
 		item("ui.open_in_browser", {
 			desc = "Open in browser",
-			index = 2,
+			index = 4,
 			opts = { nowait = true, silent = true },
 			callback = function()
 				if open_current_line() then
@@ -148,23 +169,26 @@ function M.register(buf)
 		})
 	)
 
-	local refresh_item = {
-		desc = "Refresh tab",
-		index = 60,
-		opts = { nowait = true, silent = true },
-		callback = function()
-			require("atlas.pulls.ui.detail").refresh()
-		end,
-	}
-	utils.insert_if(items, item("ui.refresh", refresh_item))
-	utils.insert_if(items, item("ui.refresh_view", refresh_item))
+	local refresh_keys = resolver.resolve("ui.refresh") or {}
+	vim.list_extend(refresh_keys, resolver.resolve("ui.refresh_view") or {})
+	if #refresh_keys > 0 then
+		table.insert(items, {
+			key = refresh_keys,
+			desc = "Refresh tab",
+			index = 80,
+			opts = { nowait = true, silent = true },
+			callback = function()
+				require("atlas.pulls.ui.detail").refresh()
+			end,
+		})
+	end
 
 	if state.provider and state.provider.capabilities.actions then
 		utils.insert_if(
 			items,
 			item("ui.open_actions", {
 				desc = "Open PR actions",
-				index = 50,
+				index = 1,
 				callback = function()
 					local pr = state.current_pr
 					if pr == nil then
@@ -186,7 +210,7 @@ function M.register(buf)
 		items,
 		item("pulls.open_diff", {
 			desc = "Open PR diff",
-			index = 1,
+			index = 2,
 			opts = { nowait = true },
 			callback = function()
 				local pr = state.current_pr
@@ -205,7 +229,7 @@ function M.register(buf)
 		items,
 		item("pulls.checkout", {
 			desc = "Checkout PR branch",
-			index = 30,
+			index = 6,
 			opts = { nowait = true },
 			callback = function()
 				local pr = state.current_pr
@@ -220,50 +244,14 @@ function M.register(buf)
 		})
 	)
 
-	if supports_action("edit_title") then
+	if supports_action("edit_pr") then
 		utils.insert_if(
 			items,
-			item("pulls.edit_title", {
-				desc = "Edit PR title",
-				index = 40,
+			item("pulls.edit_pr", {
+				desc = "Edit PR",
+				index = 5,
 				opts = { nowait = true, silent = true },
-				callback = function()
-					local pr = state.current_pr
-					if pr == nil then
-						return
-					end
-					local current = action_context(pr)
-					if current then
-						local on_update = state.on_update
-						actions.run("edit_title", current, function(result)
-							complete_action(pr, on_update, result)
-						end)
-					end
-				end,
-			})
-		)
-	end
-
-	if supports_action("edit_description") then
-		utils.insert_if(
-			items,
-			item("pulls.edit_description", {
-				desc = "Edit PR description",
-				index = 41,
-				opts = { nowait = true, silent = true },
-				callback = function()
-					local pr = state.current_pr
-					if pr == nil then
-						return
-					end
-					local current = action_context(pr)
-					if current then
-						local on_update = state.on_update
-						actions.run("edit_description", current, function(result)
-							complete_action(pr, on_update, result)
-						end)
-					end
-				end,
+				callback = run_pr_action("edit_pr"),
 			})
 		)
 	end
@@ -273,21 +261,9 @@ function M.register(buf)
 			items,
 			item("ui.toggle_subscription", {
 				desc = "Toggle subscription",
-				index = 42,
+				index = 30,
 				opts = { nowait = true, silent = true },
-				callback = function()
-					local pr = state.current_pr
-					if pr == nil then
-						return
-					end
-					local current = action_context(pr)
-					if current then
-						local on_update = state.on_update
-						actions.run("toggle_subscription", current, function(result)
-							complete_action(pr, on_update, result)
-						end)
-					end
-				end,
+				callback = run_pr_action("toggle_subscription"),
 			})
 		)
 	end
@@ -375,16 +351,22 @@ function M.register(buf)
 			end)
 		end
 	end)
-	vim.list_extend(general, custom_items)
-	registrations[buf] = general
-	help.register("General", general, { index = 300, buffer = buf })
+	registrations[buf] = {
+		{ group = "General", items = general, index = 1 },
+		{ group = "Custom", items = custom_items, index = 3 },
+	}
+	for _, registration in ipairs(registrations[buf]) do
+		help.register(registration.group, registration.items, { index = registration.index, buffer = buf })
+	end
 end
 
 ---@param buf integer
 function M.remove(buf)
 	local registered = registrations[buf]
 	if registered then
-		help.remove("General", registered, { buffer = buf })
+		for _, registration in ipairs(registered) do
+			help.remove(registration.group, registration.items, { buffer = buf })
+		end
 		registrations[buf] = nil
 	end
 end

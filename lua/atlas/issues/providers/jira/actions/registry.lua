@@ -170,6 +170,7 @@ local function assign(ctx, done)
 
 	picker.search({
 		title = string.format("Assign %s", issue_key),
+		size = { width = 0.3, height = 0.3 },
 		initial_items = to_picker_items({}),
 		fetch_on_open = false,
 		format_item = function(item)
@@ -237,6 +238,7 @@ local function reporter(ctx, done)
 
 	picker.search({
 		title = string.format("Reporter for %s", issue_key),
+		size = { width = 0.3, height = 0.3 },
 		fetch_on_open = false,
 		format_item = function(item)
 			return string.format("%s %s", icons.general("user"), item.label)
@@ -312,81 +314,8 @@ local function edit_issue(ctx, done)
 	local issue = assert(ctx.issue)
 	---@cast issue JiraIssue
 
-	local issue_key = issue.key
-	local md_to_adf = require("atlas.formats.adf.from_markdown")
-	local issue_editor = require("atlas.issues.create.jira.issue")
-
-	local function open_editor(initial_description)
-		issue_editor.open(function(fields, submit_done)
-			local is_server = service.is_server()
-
-			local desc = fields.description
-			local payload = {
-				summary = fields.summary,
-			}
-			if (desc or "") ~= initial_description then
-				payload.description = type(desc) == "string" and (is_server and desc or md_to_adf.to_adf(desc))
-					or vim.NIL
-			end
-
-			if fields.issue_type and fields.issue_type.id and fields.issue_type.id ~= "" then
-				payload.issuetype = { id = fields.issue_type.id }
-			end
-
-			if fields.assignee and fields.assignee.id then
-				payload.assignee = is_server and { name = fields.assignee.id } or { id = fields.assignee.id }
-			else
-				payload.assignee = vim.NIL
-			end
-
-			if fields.reporter and fields.reporter.id ~= (issue.reporter and issue.reporter.id) then
-				payload.reporter = is_server and { name = fields.reporter.id } or { accountId = fields.reporter.id }
-			end
-
-			notify.loading(string.format("Updating issue %s...", issue_key))
-			issues_api.update_issue(issue_key, payload, function(ok, err)
-				if not ok then
-					local message = err or "Failed to update issue"
-					notify.error(message)
-					submit_done(false, message)
-					done(nil, message)
-					return
-				end
-
-				notify.success(string.format("Updated %s", issue_key), { timeout = 1200 })
-				submit_done(true, nil)
-				vim.schedule(function()
-					done({ issue_key = issue_key }, nil)
-				end)
-			end)
-		end, {
-			summary = tostring(issue.title or ""),
-			description = initial_description,
-			assignee = issue.assignee,
-			reporter = issue.reporter,
-			project = issue.project and issue.project.key or "",
-			issue_key = issue.key,
-			issue_type = issue.type,
-		}, {
-			current_user = ctx.current_user,
-			preview_fn = function(markdown)
-				local utils = require("atlas.ui.shared.utils")
-				return utils.encode_pretty_json(md_to_adf.to_adf(markdown))
-			end,
-		})
-	end
-
-	notify.loading(string.format("Loading description for %s...", issue_key))
-	issues_api.fetch_issue({ key = issue_key }, { force_refresh = true }, function(details, err)
-		if err or details == nil then
-			local message = string.format("Failed loading description for %s: %s", issue_key, err or "Empty response")
-			notify.error(message)
-			done(nil, message)
-			return
-		end
-
-		notify.success(string.format("Loaded description for %s", issue_key), { timeout = 1200 })
-		open_editor(details.description)
+	return require("atlas.issues.providers.jira.ui.editor").edit(issue, function(result, err)
+		done(result and { issue_key = result.key } or nil, err)
 	end)
 end
 
@@ -422,194 +351,77 @@ local function filter_projects(items, query)
 	end, items)
 end
 
----@param context AtlasIssueActionContext
+---@param _ AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
-local function create_issue(context, done)
-	local md_to_adf = require("atlas.formats.adf.from_markdown")
-	local issue_editor = require("atlas.issues.create.jira.issue")
-	local function open_created_issue(key)
-		vim.schedule(function()
-			require("atlas.commands.open").open(key)
-		end)
-	end
-	local function run_create(project_key)
-		issue_editor.open(function(fields, submit_done)
-			local issue_type = fields.issue_type
-			local issue_type_id = issue_type and tostring(issue_type.id or "") or ""
-			local issue_type_name = issue_type and tostring(issue_type.name or "") or ""
-
-			local api_fields = {
-				project = { key = fields.project },
-				summary = fields.summary,
-			}
-
-			if issue_type_id ~= "" then
-				api_fields.issuetype = { id = issue_type_id }
-			elseif issue_type_name ~= "" then
-				api_fields.issuetype = { name = issue_type_name }
-			else
-				notify.error("Issue type is required")
-				submit_done(false, "Issue type is required")
-				done(nil, "Issue type is required")
-				return
-			end
-
-			local is_server = service.is_server()
-			if fields.reporter and fields.reporter.id then
-				api_fields.reporter = is_server and { name = fields.reporter.id } or { accountId = fields.reporter.id }
-			end
-
-			local desc = fields.description
-			if type(desc) == "string" then
-				api_fields.description = is_server and desc or md_to_adf.to_adf(desc)
-			end
-
-			if fields.assignee and fields.assignee.id then
-				api_fields.assignee = is_server and { name = fields.assignee.id } or { id = fields.assignee.id }
-			end
-
-			local raw_desc = desc
-			-- Jira Server workaround: some configs omit `description` from the create screen.
-			-- See: https://support.atlassian.com/jira/kb/can-not-create-issue-via-rest-api-field-xxx-cannot-be-set-it-is-not-on-the-appropriate-screen-or-unknown-when-using-workflow-property-jirapermissioncreateclonedenied/
-			local function commit_create(payload, was_retry)
-				issues_api.create_issue(payload, function(result, err)
-					if err then
-						if
-							not was_retry
-							and type(raw_desc) == "string"
-							and err:find("Field 'description' cannot be set", 1, true)
-						then
-							local retry = vim.deepcopy(payload)
-							retry.description = nil
-							commit_create(retry, true)
-							return
-						end
-						notify.error(err)
-						submit_done(false, err)
-						done(nil, err)
-						return
-					end
-
-					if result and result.key then
-						if was_retry and type(raw_desc) == "string" then
-							local update = { description = raw_desc }
-							issues_api.update_issue(result.key, update, function(ok)
-								if ok then
-									notify.info(
-										string.format("Created %s", result.key),
-										{ timeout = 2000, vim_notify = true }
-									)
-									submit_done(true, nil)
-									done({ issue_key = result.key }, nil)
-									open_created_issue(result.key)
-								else
-									notify.warn(
-										"Issue created but failed to set description",
-										{ timeout = 3000, vim_notify = true }
-									)
-									submit_done(true, "Description not set")
-									done({ issue_key = result.key }, nil)
-									open_created_issue(result.key)
-								end
-							end)
-							return
-						end
-
-						notify.info(string.format("Created %s", result.key), { timeout = 2000, vim_notify = true })
-						submit_done(true, nil)
-						done({ issue_key = result.key }, nil)
-						open_created_issue(result.key)
-						return
-					end
-
-					notify.error("Invalid response")
-					submit_done(false, "Invalid response")
-					done(nil, "Invalid response")
-				end)
-			end
-
-			commit_create(api_fields, false)
-		end, {
-			summary = "",
-			description = nil,
-			assignee = nil,
-			reporter = nil,
-			project = project_key,
-			issue_key = nil,
-			issue_type = nil,
-		}, {
-			current_user = context.current_user,
-			preview_fn = function(markdown)
-				local utils = require("atlas.ui.shared.utils")
-				return utils.encode_pretty_json(md_to_adf.to_adf(markdown))
-			end,
-		})
-	end
-
-	local all_items = nil
-
-	picker.search({
-		title = "Create Issue",
-		debounce_ms = 0,
-		format_item = function(item)
-			return format_project(item.value)
-		end,
-		fetch = function(query, fetch_done)
-			if all_items then
-				fetch_done(filter_projects(all_items, query), nil)
-				return
-			end
-
-			return projects_api.get_projects({ maxResults = 50, total = 2, status = "live" }, function(groups, err)
-				if err or not groups then
-					fetch_done(nil, err or "Failed to load projects")
-					return
-				end
-
-				local projects = flatten_projects(groups)
-
-				local project_ids = {}
-				for _, project in ipairs(projects) do
-					local project_id = tonumber(project.id)
-					if project_id then
-						table.insert(project_ids, project_id)
-					end
-				end
-
-				issues_api.get_permissions_bulk({
-					permissions = { "CREATE_ISSUES" },
-					project_ids = project_ids,
-				}, function(permission_map, perm_err)
-					if perm_err or not permission_map then
-						fetch_done(nil, perm_err or "Failed to load project permissions")
-						return
-					end
-
-					local allowed_map = permission_map.CREATE_ISSUES or {}
-					all_items = {}
-					for _, project in ipairs(projects) do
-						local project_id = tonumber(project.id)
-						if project_id and allowed_map[project_id] == true then
-							table.insert(all_items, {
-								id = tostring(project.id or ""),
-								label = tostring(project.key or ""),
-								value = project,
-							})
-						end
-					end
-
-					fetch_done(all_items, nil)
-				end)
-			end)
-		end,
-		on_select = function(item)
-			run_create(item.value.key)
-		end,
-		on_cancel = function()
+local function create_issue(_, done)
+	local function open_editor(project)
+		if not project then
 			notify.info("Create issue cancelled", { timeout = 1200, vim_notify = true })
 			done(nil, nil)
-		end,
-	})
+			return
+		end
+
+		require("atlas.issues.providers.jira.ui.editor").open(project.key, function(result, err)
+			done(result and { issue_key = result.key } or nil, err)
+		end)
+	end
+
+	notify.loading("Loading projects...")
+	return projects_api.get_projects({ maxResults = 50, total = math.huge, status = "live" }, function(groups, err)
+		if err or not groups then
+			err = err or "Failed to load projects"
+			notify.error(err)
+			done(nil, err)
+			return
+		end
+
+		local projects = flatten_projects(groups)
+		if #projects == 0 then
+			notify.info("No Jira projects found")
+			done(nil, nil)
+			return
+		end
+
+		local project_ids = {}
+		for _, project in ipairs(projects) do
+			local project_id = tonumber(project.id)
+			if project_id then
+				table.insert(project_ids, project_id)
+			end
+		end
+
+		issues_api.get_permissions_bulk({
+			permissions = { "CREATE_ISSUES" },
+			project_ids = project_ids,
+		}, function(permission_map, perm_err)
+			if perm_err or not permission_map then
+				perm_err = perm_err or "Failed to load project permissions"
+				notify.error(perm_err)
+				done(nil, perm_err)
+				return
+			end
+
+			local allowed_map = permission_map.CREATE_ISSUES or {}
+			local allowed_projects = vim.tbl_filter(function(project)
+				return allowed_map[tonumber(project.id)] == true
+			end, projects)
+
+			notify.clear()
+			if #allowed_projects == 0 then
+				notify.info("No Jira projects allow creating issues")
+				done(nil, nil)
+			elseif #allowed_projects == 1 then
+				open_editor(allowed_projects[1])
+			else
+				picker.select({
+					title = "Create Issue",
+					items = allowed_projects,
+					format_item = format_project,
+					on_select = open_editor,
+				})
+			end
+		end)
+	end)
 end
 
 ---@param issue Issue
@@ -672,7 +484,7 @@ local function search_issues(project, ctx, done)
 			end)
 		end,
 		fetch = function(query, fetch_done)
-			return issues_api.search_issue(project, vim.trim(query), function(items, err)
+			return issues_api.issue_picker(project, vim.trim(query), function(items, err)
 				if err ~= nil or items == nil then
 					fetch_done(nil, err or "Failed to search tickets")
 					return
@@ -787,21 +599,30 @@ local function search_jql(_, done)
 	done(nil, nil)
 end
 
+---@param issue Issue
+---@return string|nil
+local function issue_url(issue)
+	local base_url = service.base_url():gsub("/$", "")
+	if base_url == "" then
+		return nil
+	end
+	return base_url .. "/browse/" .. issue.key
+end
+
 ---@param ctx AtlasIssueActionContext
 ---@param done fun(result: IssuesActionResult|nil, err: string|nil)
 local function browse_issue(ctx, done)
 	local issue = assert(ctx.issue)
 
-	local base_url = service.base_url():gsub("/$", "")
-	local issue_key = tostring(issue.key or "")
-	if base_url == "" or issue_key == "" then
+	local url = issue_url(issue)
+	if url == nil then
 		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return
 	end
 
-	vim.ui.open(string.format("%s/browse/%s", base_url, issue_key))
-	notify.success(string.format("Opened %s in browser", issue_key), { timeout = 1200 })
+	vim.ui.open(url)
+	notify.success(string.format("Opened %s in browser", issue.key), { timeout = 1200 })
 	done(nil, nil)
 end
 
@@ -810,10 +631,8 @@ end
 local function copy_issue_url(ctx, done)
 	local issue = assert(ctx.issue)
 
-	local base_url = service.base_url():gsub("/$", "")
-	local issue_key = tostring(issue.key or "")
-	local url = (base_url ~= "" and issue_key ~= "") and string.format("%s/browse/%s", base_url, issue_key) or ""
-	if url == "" then
+	local url = issue_url(issue)
+	if url == nil then
 		notify.error("No URL found for issue")
 		done(nil, "No URL found for issue")
 		return

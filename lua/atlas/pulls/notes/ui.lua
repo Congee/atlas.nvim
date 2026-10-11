@@ -51,14 +51,15 @@ local function render()
 		return
 	end
 
+	local win = valid_window() and state.win or nil
 	local selected
-	if valid_window() then
-		local item = state.line_map[vim.api.nvim_win_get_cursor(state.win)[1]]
+	if win then
+		local item = state.line_map[vim.api.nvim_win_get_cursor(win)[1]]
 		selected = item and item.tree_key or nil
 	end
 	local lines, spans, line_map = renderer.render_manager({
 		documents = state.documents,
-		width = valid_window() and vim.api.nvim_win_get_width(state.win) or vim.o.columns,
+		width = win and vim.api.nvim_win_get_width(win) or vim.o.columns,
 		target_filter = state.target_filter,
 		expanded = state.expanded,
 		action_keys = {
@@ -141,9 +142,7 @@ local function refresh()
 	render()
 end
 
-function M.refresh()
-	refresh()
-end
+M.refresh = refresh
 
 ---@return integer
 local function ensure_buffer()

@@ -55,7 +55,7 @@ local function fetch_discussions(issue, opts, on_done)
 	end
 
 	local cache_key = discussions_cache_key(path, iid)
-	if not opts.force_refresh then
+	if opts.force_refresh ~= true then
 		local cached, ok = service.get_memory_cache(cache_key)
 		if ok then
 			on_done(cached, nil)
@@ -82,9 +82,9 @@ local function fetch_discussions(issue, opts, on_done)
 end
 
 ---@param discussions table[]
----@return IssueComment[], IssueActivityEntry[]
+---@return IssueConversationItem[]
 local function map_discussions(discussions)
-	local comments = {}
+	local items = {}
 	local events = {}
 	for _, discussion_value in ipairs(discussions) do
 		local discussion = json.safe_table(discussion_value)
@@ -94,23 +94,33 @@ local function map_discussions(discussions)
 			if raw.system == true then
 				local entry = normalizer.to_activity_from_note(raw)
 				if entry then
-					table.insert(events, entry)
+					table.insert(events, {
+						id = table.concat({ "activity", entry.date or "", #events + 1 }, ":"),
+						kind = "activity",
+						created_at = entry.date or "",
+						entity = entry,
+					})
 				end
 			else
 				local comment = normalizer.to_comment_from_note(raw, first_id, discussion_id)
 				if comment then
 					first_id = first_id or comment.id
-					table.insert(comments, comment)
+					table.insert(items, {
+						id = "comment:" .. tostring(comment.id),
+						kind = "comment",
+						created_at = comment.created or "",
+						entity = comment,
+					})
 				end
 			end
 		end
 	end
-	return comments, events
+	return vim.list_extend(items, events)
 end
 
 ---@param issue Issue
 ---@param opts { force_refresh?: boolean }|nil
----@param on_done fun(result: { comments: IssueComment[], events: IssueActivityEntry[] }|nil, err: string|nil)
+---@param on_done fun(items: IssueConversationItem[]|nil, err: string|nil)
 ---@return { cancel: fun() }|nil
 function M.list_conversation(issue, opts, on_done)
 	return fetch_discussions(issue, opts, function(discussions, err)
@@ -118,8 +128,7 @@ function M.list_conversation(issue, opts, on_done)
 			on_done(nil, err)
 			return
 		end
-		local comments, events = map_discussions(discussions)
-		on_done({ comments = comments, events = events }, nil)
+		on_done(map_discussions(discussions), nil)
 	end)
 end
 

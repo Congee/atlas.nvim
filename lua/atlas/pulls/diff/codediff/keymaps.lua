@@ -14,9 +14,10 @@ local M = {}
 ---@param keys string[]|false|nil
 ---@param desc string
 ---@param callback fun()
-local function add(items, keys, desc, callback)
+---@param index integer|nil
+local function add(items, keys, desc, callback, index)
 	if keys then
-		items[#items + 1] = { key = keys, desc = desc, callback = callback }
+		items[#items + 1] = { key = keys, desc = desc, callback = callback, index = index }
 	end
 end
 
@@ -75,7 +76,7 @@ function M.setup(session, commands, groups, renderer_actions)
 	local help_items = {}
 	add(help_items, resolver.resolve("pulls.review.view.external_help"), "Show CodeDiff help", function()
 		codediff_help.toggle(view.tabpage)
-	end)
+	end, 101)
 
 	local function navigate_file(direction)
 		if not config.options.diff.cycle_next_file then

@@ -45,7 +45,7 @@ function M.setup(session, close, select_page)
 			table.insert(items, {
 				key = resolver.resolve("ui.select") or {},
 				desc = "Open page",
-				index = 20,
+				index = 1,
 				callback = function()
 					select_page(vim.api.nvim_win_get_cursor(pane.win)[1])
 					vim.api.nvim_set_current_win(session.content.win)
@@ -53,7 +53,7 @@ function M.setup(session, close, select_page)
 				opts = { nowait = true, silent = true },
 			})
 		end
-		help.register("General", items, { buffer = pane.buf })
+		help.register("General", items, { buffer = pane.buf, index = 1 })
 	end
 end
 

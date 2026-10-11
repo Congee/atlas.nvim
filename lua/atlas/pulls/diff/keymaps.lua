@@ -99,11 +99,13 @@ end
 ---@param name string
 ---@param items AtlasHelpKeyItem[]
 ---@param review_items AtlasHelpKeyItem[]
+---@param custom_items AtlasHelpKeyItem[]
 ---@return AtlasDiffKeymapGroup[]
-local function groups(name, items, review_items)
+local function groups(name, items, review_items, custom_items)
 	return {
 		{ name = name, items = items, index = 1 },
 		{ name = "Review", items = review_items, index = 2 },
+		{ name = "Custom", items = custom_items, index = 3 },
 	}
 end
 
@@ -121,7 +123,15 @@ function M.setup(session, actions)
 	end)
 	add(shared_items, "pulls.review.explorer.find_file", "Find changed file", 30, actions.find_file)
 	add(shared_items, "pulls.review.explorer.toggle_commits", "Toggle commits", 42, actions.toggle_commits)
-	add(shared_items, "pulls.review.view.toggle_review_panel", "Toggle review panel", 43, actions.toggle_review_panel)
+	if result.pr then
+		add(
+			shared_items,
+			"pulls.review.view.toggle_review_panel",
+			"Toggle review panel",
+			43,
+			actions.toggle_review_panel
+		)
+	end
 	add(shared_items, "pulls.review.view.toggle_detail_panel", "Toggle PR details", 44, function()
 		actions.dispatch("toggle_detail_panel")
 	end)
@@ -148,7 +158,6 @@ function M.setup(session, actions)
 		add(review_items, "pulls.review.next_comment", "Next comment", 91, function()
 			actions.navigate_annotation(1, "comment")
 		end)
-		vim.list_extend(review_items, resolver.custom_items("pulls", actions.run_custom))
 	end
 	if result.notes then
 		add(review_items, "pulls.review.prev_note", "Previous note", 92, function()
@@ -225,9 +234,10 @@ function M.setup(session, actions)
 		end
 	end)
 
-	session.renderer.setup_keymaps(session, actions, groups("View", shared_items, diff_review_items))
-	register(session.explorer.buf, groups("Explorer", shared_items, explorer_review_items))
-	register(session.commits.buf, groups("Commits", commits_items, review_items))
+	local custom_items = result.pr and resolver.custom_items("pulls", actions.run_custom) or {}
+	session.renderer.setup_keymaps(session, actions, groups("View", shared_items, diff_review_items, custom_items))
+	register(session.explorer.buf, groups("Explorer", shared_items, explorer_review_items, custom_items))
+	register(session.commits.buf, groups("Commits", commits_items, review_items, custom_items))
 end
 
 return M

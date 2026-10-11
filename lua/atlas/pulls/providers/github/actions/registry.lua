@@ -48,12 +48,22 @@ end
 
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
-local function review_available(ctx)
+local function repository_available(ctx)
 	if ctx.pr == nil then
 		return false, "No PR selected"
 	end
 	if ctx.pr.repo_full_name == "" then
 		return false, "Missing repository info"
+	end
+	return true, nil
+end
+
+---@param ctx AtlasPullActionContext
+---@return boolean, string|nil
+local function review_available(ctx)
+	local ok, err = repository_available(ctx)
+	if not ok then
+		return ok, err
 	end
 	if ctx.pr.state ~= "open" and ctx.pr.state ~= "draft" then
 		return false, "PR is not open"
@@ -64,11 +74,9 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function merge_available(ctx)
-	if ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if ctx.pr.repo_full_name == "" then
-		return false, "Missing repository info"
+	local ok, err = repository_available(ctx)
+	if not ok then
+		return ok, err
 	end
 	if ctx.pr.state ~= "open" then
 		return false, "PR is not open"
@@ -79,11 +87,9 @@ end
 ---@param ctx AtlasPullActionContext
 ---@return boolean, string|nil
 local function reopen_available(ctx)
-	if ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if ctx.pr.repo_full_name == "" then
-		return false, "Missing repository info"
+	local ok, err = repository_available(ctx)
+	if not ok then
+		return ok, err
 	end
 	if tostring(ctx.pr.state or ""):lower() ~= "declined" then
 		return false, "PR is not closed"
@@ -94,11 +100,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function reopen(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
+	local pr = assert(ctx.pr)
 	notify(ctx, "loading", "Reopening PR...")
 	pullrequests.reopen(pr, function(_, err)
 		if err then
@@ -113,25 +115,9 @@ local function reopen(ctx, done)
 end
 
 ---@param ctx AtlasPullActionContext
----@return boolean, string|nil
-local function repository_available(ctx)
-	if ctx.pr == nil then
-		return false, "No PR selected"
-	end
-	if ctx.pr.repo_full_name == "" then
-		return false, "Missing repository info"
-	end
-	return true, nil
-end
-
----@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_assignees(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
+	local pr = assert(ctx.pr)
 
 	local slug = pr.repo_full_name
 	---@param assignees PullsAuthor[]
@@ -163,7 +149,7 @@ local function edit_assignees(ctx, done)
 
 			picker.multi_select({
 				items = items,
-				selected = vim.deepcopy(original),
+				selected = original,
 				key = function(item)
 					return item.username
 				end,
@@ -171,7 +157,7 @@ local function edit_assignees(ctx, done)
 					return string.format(
 						"@%s%s",
 						item.username,
-						item.name ~= "" and item.name ~= item.username and (" — " .. item.name) or ""
+						item.name ~= "" and item.name ~= item.username and (" - " .. item.name) or ""
 					)
 				end,
 				title = string.format("Assignees for PR #%s", tostring(pr.id or "")),
@@ -206,8 +192,9 @@ local function edit_assignees(ctx, done)
 
 	notify(ctx, "loading", "Loading assignees...")
 	if ctx.details then
-		---@cast ctx.details GitHubPullRequestDetails
-		open_picker(ctx.details.assignees)
+		local details = ctx.details
+		---@cast details GitHubPullRequestDetails
+		open_picker(details.assignees)
 		return
 	end
 	pullrequests.get_pr(pr.repo.owner, pr.repo.repo_name, pr.id, function(details, err)
@@ -225,11 +212,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function edit_labels(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
+	local pr = assert(ctx.pr)
 	local slug = pr.repo_full_name
 
 	notify(ctx, "loading", "Loading labels...")
@@ -248,12 +231,7 @@ local function edit_labels(ctx, done)
 				return
 			end
 
-			local items = {}
-			for _, label in ipairs(labels) do
-				table.insert(items, { name = label.name, color = label.color })
-			end
-
-			if #items == 0 then
+			if #labels == 0 then
 				notify(ctx, "warn", "No labels available")
 				done({ changed_pr = false, message = "No labels available" }, nil)
 				return
@@ -262,17 +240,14 @@ local function edit_labels(ctx, done)
 			local original = {}
 			local original_set = {}
 			for _, label in ipairs(current.labels) do
-				local name = tostring(label.name or "")
-				if name ~= "" then
-					table.insert(original, { name = name, color = label.color })
-					original_set[name] = true
-				end
+				table.insert(original, label)
+				original_set[label.name] = true
 			end
 			notify(ctx, "success", "Labels loaded", 1200)
 
 			picker.multi_select({
-				items = items,
-				selected = vim.deepcopy(original),
+				items = labels,
+				selected = original,
 				key = function(item)
 					return item.name
 				end,
@@ -313,19 +288,10 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function create_issue(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
+	local pr = assert(ctx.pr)
 	local slug = pr.repo_full_name
-	if slug == "" then
-		done(nil, "Missing repository info")
-		return
-	end
 
-	local create_issue_ui = require("atlas.issues.create.github.issue")
-	create_issue_ui.open({ repo_slug = slug })
+	require("atlas.issues.providers.github.ui.editor").open(slug)
 	done({ changed_pr = false, message = "Opened issue editor" }, nil)
 end
 
@@ -510,11 +476,7 @@ end
 ---@param ctx AtlasPullActionContext
 ---@param done fun(result: PullsActionResult|nil, err: string|nil)
 local function toggle_subscription(ctx, done)
-	local pr = ctx.pr
-	if pr == nil then
-		done(nil, "No PR selected")
-		return
-	end
+	local pr = assert(ctx.pr)
 	---@cast pr GitHubPullRequest
 	---@param details PullRequestDetails
 	local function update(details)
@@ -585,8 +547,7 @@ register({
 	run = reopen,
 })
 
-register(actions.edit_title)
-register(actions.edit_description)
+register(actions.edit_pr)
 register(actions.edit_reviewers)
 
 register({

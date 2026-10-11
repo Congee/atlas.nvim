@@ -190,7 +190,7 @@ function M.setup(buf, refresh)
 		table.insert(items, toggle_all)
 	end
 	M.teardown(buf)
-	help.register("Detail", items, { index = 212, buffer = buf })
+	help.register("Detail", items, { index = 2, buffer = buf })
 	registrations[buf] = items
 end
 

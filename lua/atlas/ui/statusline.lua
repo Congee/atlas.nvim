@@ -208,8 +208,13 @@ function M.format(segments, current_notice, available, options)
 	end
 	if options.help_key then
 		fitted[#fitted + 1] = {
-			text = string.format("%s help", options.help_key),
-			hl_group = "AtlasFooterWarning",
+			text = options.help_key,
+			hl_group = BACKGROUND_HL,
+			align = "right",
+		}
+		fitted[#fitted + 1] = {
+			text = "help",
+			hl_group = "AtlasFooterText",
 			align = "right",
 			priority = 10,
 		}
@@ -352,7 +357,7 @@ function Statusline:notify(level, text, duration_ms)
 	self.notice.hl_group = hl_group
 	if level == "loading" then
 		self:start_loading(token, message)
-		self.notice.text = self.loading_spinner and self.loading_spinner:text(message) or message
+		self.notice.text = self.loading_spinner:text(message)
 		redraw(self.options.context)
 		return
 	end

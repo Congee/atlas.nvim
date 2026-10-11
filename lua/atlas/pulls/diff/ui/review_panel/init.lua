@@ -338,7 +338,6 @@ function M.render(state)
 							comment_location(item.thread.comment),
 							{
 								action_keys = action_keys,
-								format_text = comment_options.format_text,
 								reaction_options = comment_options.reaction_options,
 							}
 						)
@@ -499,7 +498,7 @@ function M.open(state)
 	options.relativenumber = false
 	options.signcolumn = "no"
 	options.statuscolumn = ""
-	options.winbar = " Atlas Review"
+	options.winbar = " Review"
 	options.winhighlight = ""
 	options.foldcolumn = "0"
 	options.fillchars = "eob: "

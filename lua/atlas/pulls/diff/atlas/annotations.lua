@@ -53,14 +53,7 @@ end
 ---@param view AtlasDiffNativeView
 local function draw_annotations(view, lookup, placed, hunks, expanded, comment_options)
 	for buf, by_line in pairs(lookup) do
-		for line in pairs(by_line) do
-			vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
-				sign_text = "┃",
-				sign_hl_group = "AtlasLogInfo",
-				number_hl_group = "CursorLineNr",
-				priority = 1100,
-			})
-		end
+		ui.draw_signs(namespace, buf, by_line)
 	end
 
 	local topfill = {}
@@ -102,7 +95,7 @@ local function draw_annotations(view, lookup, placed, hunks, expanded, comment_o
 				end
 			else
 				vim.api.nvim_buf_set_extmark(buf, namespace, line - 1, 0, {
-					virt_text = ui.render_virtual_text(items, comment_options.format_text),
+					virt_text = ui.render_virtual_text(items),
 					virt_text_pos = "eol",
 					priority = 1100,
 				})
@@ -149,7 +142,7 @@ function M.render(view, document)
 				if expanded then
 					cards[line] = ui.render_virtual_lines(entries, width, comment_options)
 				else
-					previews[line] = ui.render_virtual_text(entries, comment_options.format_text)
+					previews[line] = ui.render_virtual_text(entries)
 				end
 			end
 

@@ -46,9 +46,8 @@ local function from_action(action_id, map_item)
 	if keys == nil then
 		return nil
 	end
-	local item = vim.tbl_deep_extend("force", {}, map_item)
-	item.key = #keys == 1 and keys[1] or keys
-	return item
+	map_item.key = #keys == 1 and keys[1] or keys
+	return map_item
 end
 
 ---@param refresh fun()
@@ -176,7 +175,7 @@ function M.setup(buf, refresh)
 	)
 
 	M.teardown(buf)
-	help.register("Detail", items, { index = 212, buffer = buf })
+	help.register("Detail", items, { index = 2, buffer = buf })
 	registrations[buf] = items
 end
 

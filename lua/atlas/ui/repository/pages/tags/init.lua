@@ -113,11 +113,6 @@ end
 ---@param page integer|nil
 local function load(state, page)
 	local repository = state.provider.capabilities.repository
-	if not repository then
-		state.tags = "Tags are not available for this provider"
-		render(state)
-		return
-	end
 	state.requests.cancel()
 	state.requests = requests.new()
 	state.page = page or 1
@@ -149,9 +144,6 @@ end
 ---@param state RepositoryTags
 local function search(state)
 	local repository = state.provider.capabilities.repository
-	if not repository then
-		return
-	end
 	local tags = state.tags
 	picker.search({
 		title = "Tags",

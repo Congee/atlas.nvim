@@ -379,14 +379,6 @@ local function get_selection(view)
 	end
 
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local first = vim.api.nvim_win_get_cursor(win)[1]
-	local last = first
-	local mode = vim.fn.mode()
-	if mode == "v" or mode == "V" or mode == "\22" then
-		first = vim.fn.line("v")
-		first, last = math.min(first, last), math.max(first, last)
-		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
-	end
 
 	local function position(line)
 		local value = { from = side == "LEFT" and line or nil, to = side == "RIGHT" and line or nil }
@@ -415,20 +407,7 @@ local function get_selection(view)
 		return value
 	end
 
-	local inline_position = position(last)
-	if first ~= last then
-		local start = position(first)
-		if (start.to ~= nil) ~= (inline_position.to ~= nil) then
-			return nil, "The selected lines cannot be represented as one review range"
-		end
-		inline_position.start_from = start.from
-		inline_position.start_to = start.to
-	end
-	inline_position.path = file.path
-	inline_position.old_path = file.old_path
-	inline_position.commit_hash = view.result.head_revision
-
-	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline_position }
+	return annotation_ui.selection(view, file, side, lines, position)
 end
 
 ---@param session AtlasDiffSession

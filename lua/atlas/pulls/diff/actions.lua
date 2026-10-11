@@ -1,4 +1,5 @@
 local action_runner = require("atlas.core.actions")
+local annotations = require("atlas.pulls.diff.ui.annotations")
 local review_actions = require("atlas.pulls.actions.review")
 local code_preview = require("atlas.ui.components.code_preview")
 local commits = require("atlas.pulls.diff.ui.commits")
@@ -156,7 +157,6 @@ local function review_context(context)
 		comment = context.comment,
 		review_entry = context.review_entry,
 		draft = draft,
-		review_context = review.context,
 		on_submit = context.on_submit,
 	}
 end
@@ -443,8 +443,7 @@ M.open_in_browser = {
 			return false
 		end
 
-		local by_line = session.view.annotations[vim.api.nvim_get_current_buf()]
-		local items = by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+		local items = annotations.at_cursor(session.view)
 		for _, item in ipairs(items or {}) do
 			local comment = item.thread and item.thread.comment
 			local url = comment and (comment.html_url or comment.url)
@@ -507,7 +506,7 @@ M.open_actions = {
 			return false
 		end
 
-		local reviews = review.provider.capabilities.reviews or {}
+		local reviews = review.provider.capabilities.reviews
 		---@type AtlasAction[]
 		local items = {}
 

@@ -20,6 +20,20 @@ local popup
 ---@field note AtlasNote|nil
 ---@field outdated boolean|nil
 
+---@param ns integer
+---@param buf integer
+---@param lookup table<integer, AtlasDiffAnnotation[]>
+function M.draw_signs(ns, buf, lookup)
+	for line in pairs(lookup) do
+		vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {
+			sign_text = "┃",
+			sign_hl_group = "AtlasLogInfo",
+			number_hl_group = "CursorLineNr",
+			priority = 1100,
+		})
+	end
+end
+
 ---@param result AtlasDiffResult
 ---@param expanded_threads table<string, boolean>|nil
 ---@return AtlasCommentThreadRenderOptions
@@ -44,14 +58,6 @@ function M.comment_options(result, expanded_threads)
 	end
 
 	options.reaction_options = comments.reaction_options
-	local review = result.review
-	if review and review.data and comments.comment_formatter then
-		options.format_text = comments.comment_formatter({
-			pr = pr,
-			data = review.data,
-			review_context = review.context,
-		})
-	end
 
 	return options
 end
@@ -91,6 +97,49 @@ function M.for_file(result, file)
 end
 
 ---@param view AtlasDiffView
+---@return AtlasDiffAnnotation[]|nil
+function M.at_cursor(view)
+	local by_line = view.annotations[vim.api.nvim_get_current_buf()]
+	return by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]]
+end
+
+---@param view AtlasDiffView
+---@param file AtlasDiffFile
+---@param side "LEFT"|"RIGHT"
+---@param lines string[]
+---@param position fun(line: integer): { from: integer|nil, to: integer|nil }
+---@return AtlasDiffSelection|nil, string|nil
+function M.selection(view, file, side, lines, position)
+	local first = vim.api.nvim_win_get_cursor(0)[1]
+	local last = first
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		first = vim.fn.line("v")
+		first, last = math.min(first, last), math.max(first, last)
+		vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+	end
+
+	if last > #lines then
+		return nil, "The selected lines are outside the file"
+	end
+
+	local inline = position(last)
+	if first ~= last then
+		local start = position(first)
+		if (start.to ~= nil) ~= (inline.to ~= nil) then
+			return nil, "The selected lines cannot be represented as one review range"
+		end
+		inline.start_from = start.from
+		inline.start_to = start.to
+	end
+	inline.path = file.path
+	inline.old_path = file.old_path
+	inline.commit_hash = view.result.head_revision
+
+	return { file = file, side = side, first = first, last = last, source_lines = lines, inline = inline }
+end
+
+---@param view AtlasDiffView
 ---@param all boolean|nil
 ---@return boolean toggled
 function M.toggle_threads(view, all)
@@ -102,8 +151,7 @@ function M.toggle_threads(view, all)
 	if all and view.current_file then
 		items = M.for_file(view.result, view.current_file)
 	else
-		local by_line = view.annotations[vim.api.nvim_get_current_buf()]
-		items = by_line and by_line[vim.api.nvim_win_get_cursor(0)[1]] or {}
+		items = M.at_cursor(view) or {}
 	end
 
 	local threads = vim.iter(items)
@@ -147,9 +195,8 @@ local function note_location(note)
 end
 
 ---@param items AtlasDiffAnnotation[]
----@param format_text (fun(text: string): string)|nil
 ---@return [string, string][]
-function M.render_virtual_text(items, format_text)
+function M.render_virtual_text(items)
 	local chunks = {}
 	for index, item in ipairs(items) do
 		local body
@@ -159,7 +206,7 @@ function M.render_virtual_text(items, format_text)
 			markers = note_renderer.status_marker(item.note, item.outdated)
 		elseif item.thread then
 			local comment = item.thread.comment
-			body = format_text and format_text(comment.content_raw) or comment.content_raw
+			body = comment.content_display or comment.content_raw
 			markers = thread_ui.status_marker(comment)
 			if comment.state == "DELETED" then
 				body = "(deleted comment)"
@@ -205,7 +252,6 @@ function M.render_virtual_lines(items, width, options)
 			end,
 			padding_x = 0,
 			location = comment_location,
-			format_text = options.format_text,
 			reaction_options = options.reaction_options,
 		})
 		local rendered = box.render({ { lines = lines, spans = spans } }, { width = width, padding_x = 0 })
@@ -213,12 +259,14 @@ function M.render_virtual_lines(items, width, options)
 	end
 
 	if #note_items > 0 then
-		local lines, spans = note_renderer.render_cards(note_items, width, {
+		local note_width = math.max(6, width)
+		local lines, spans = note_renderer.render_cards(note_items, note_width - 4, {
 			expanded = false,
 			outdated = outdated,
 			location = note_location,
 		})
-		vim.list_extend(result, virtual_lines.render(lines, spans))
+		local rendered = box.render({ { lines = lines, spans = spans } }, { width = note_width, padding_x = 0 })
+		vim.list_extend(result, virtual_lines.render(rendered.lines, rendered.highlights))
 	end
 
 	return result
@@ -365,12 +413,10 @@ function M.open(owner, result, path, items, on_action)
 				padding_x = 2,
 				action_keys = labels,
 				location = comment_location,
-				format_text = comment_options.format_text,
 				reaction_options = comment_options.reaction_options,
 			})
 		else
-			content, spans, entries = note_renderer.render_cards({ item.note }, width, {
-				boxed = false,
+			content, spans, entries = note_renderer.render_cards({ item.note }, math.max(6, width), {
 				padding_x = 2,
 				action_keys = labels,
 				outdated = { [item.note.id] = item.outdated },
