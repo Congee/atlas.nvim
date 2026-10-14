@@ -623,6 +623,9 @@ issues = {
 }
 ```
 
+Issue views support `plain` and `compact` layouts. Jira also supports `board`, which
+groups the current page by workflow status.
+
 <a id="jira"></a>
 
 <details>
@@ -642,7 +645,7 @@ issues = {
       {
         name = "My Board",
         key = "M",
-        layout = "plain",
+        layout = "board",
         jql = "project = KAN AND assignee = currentUser() ORDER BY updated DESC",
       },
       {
@@ -672,12 +675,13 @@ issues = {
         maintenance = { icon = "", hl_group = "AtlasTextWarning" },
         infrastructure = { icon = "󰒋", hl_group = "AtlasLogInfo" },
       },
-      -- Override icons by status name or category.
+      -- Icons for issue statuses and the transition picker; names override categories.
       status_icons = {
         new = "●",
         indeterminate = "",
         done = "",
         ["In Review"] = "",
+        ["Blocked"] = "",
       },
 
       -- Custom fields to display per project; replace KAN with your project key.
@@ -820,6 +824,8 @@ keymaps = {
     close = "q", -- false would disable it
     next_item = "j",
     previous_item = "k",
+    previous_column = "h",
+    next_column = "l",
     first_item = "gg",
     last_item = "G",
     select = "<CR>",
@@ -832,6 +838,7 @@ keymaps = {
       react = "gr",
     },
     toggle_panel = "p",
+    cycle_layout = "t",
     toggle_fold = "za",
     toggle_all_folds = "zA",
     toggle_description_mode = "<leader>m",
