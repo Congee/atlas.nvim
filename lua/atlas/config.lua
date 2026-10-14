@@ -41,7 +41,7 @@
 ---@class AtlasPullsDiffExplorerConfig
 ---@field grouped boolean|nil
 ---@field hidden boolean|nil
----@field show_commits boolean|nil
+---@field show_commits boolean|"multiple"|nil
 ---@field width integer|nil
 ---@field initial_focus "explorer"|"diff"|nil
 ---@field preview boolean|nil
@@ -57,11 +57,12 @@
 -- Backs the diff with a detached worktree at the PR head so the new side is a real file buffer and
 -- language servers attach to it. `dir` receives an AtlasWorktreeContext and may return nil to keep
 -- the default location. `link` names directories symlinked from the main checkout (node_modules,
--- .venv, ...) so servers can resolve dependencies; they are the same directories on disk.
+-- .venv, ...) so servers can resolve dependencies; they are the same directories on disk. A `link`
+-- function receives the same context and returns the list.
 ---@class AtlasPullsDiffLspConfig
 ---@field enabled boolean|nil
 ---@field dir string|(fun(ctx: AtlasWorktreeContext): string|nil)|nil
----@field link string[]|nil
+---@field link string[]|(fun(ctx: AtlasWorktreeContext): string[]|nil)|nil
 
 ---@class AtlasPullsDiffConfig
 ---@field open_cmd AtlasPullsDiffOpenCommand|string|nil

@@ -104,6 +104,31 @@ function M.default_dir(ctx)
 	return join(M.cache_root(), slugify(name), leaf)
 end
 
+---@param link any
+---@return boolean ok
+---@return string|nil err
+local function validate_links(link)
+	if type(link) ~= "table" then
+		return false, "diff.lsp.link must be a list of relative paths"
+	end
+	for _, entry in ipairs(link) do
+		if type(entry) ~= "string" or trim(entry) == "" then
+			return false, "diff.lsp.link entries must be non-empty strings"
+		end
+		local value = normalize_separators(trim(entry))
+		if is_absolute(value) then
+			return false, string.format("diff.lsp.link entry must be relative: %s", entry)
+		end
+		if value == ".." or value:find("^%.%./") or value:find("/%.%./") or value:find("/%.%.$") then
+			return false, string.format("diff.lsp.link entry must not escape the repository: %s", entry)
+		end
+		if value == ".git" or value:find("^%.git/") then
+			return false, "diff.lsp.link entry must not be .git"
+		end
+	end
+	return true, nil
+end
+
 ---@param cfg AtlasPullsDiffLspConfig|nil
 ---@return boolean ok
 ---@return string|nil err
@@ -124,27 +149,34 @@ function M.validate(cfg)
 	if type(dir) == "string" and not is_absolute(dir) then
 		return false, "diff.lsp.dir must be an absolute path"
 	end
-	if cfg.link ~= nil then
-		if type(cfg.link) ~= "table" then
-			return false, "diff.lsp.link must be a list of relative paths"
-		end
-		for _, entry in ipairs(cfg.link) do
-			if type(entry) ~= "string" or trim(entry) == "" then
-				return false, "diff.lsp.link entries must be non-empty strings"
-			end
-			local value = normalize_separators(trim(entry))
-			if is_absolute(value) then
-				return false, string.format("diff.lsp.link entry must be relative: %s", entry)
-			end
-			if value == ".." or value:find("^%.%./") or value:find("/%.%./") or value:find("/%.%.$") then
-				return false, string.format("diff.lsp.link entry must not escape the repository: %s", entry)
-			end
-			if value == ".git" or value:find("^%.git/") then
-				return false, "diff.lsp.link entry must not be .git"
-			end
-		end
+	if cfg.link ~= nil and type(cfg.link) ~= "function" then
+		return validate_links(cfg.link)
 	end
 	return true, nil
+end
+
+-- Resolve the directories to symlink into the worktree for `ctx`.
+---@param ctx AtlasWorktreeContext
+---@param cfg AtlasPullsDiffLspConfig|nil
+---@return string[]|nil link
+---@return string|nil err
+function M.resolve_link(ctx, cfg)
+	local link = cfg and cfg.link or nil
+	if type(link) == "function" then
+		local called, value = pcall(link, ctx)
+		if not called then
+			return nil, "diff.lsp.link raised an error: " .. tostring(value)
+		end
+		link = value
+	end
+	if link == nil then
+		return {}, nil
+	end
+	local ok, err = validate_links(link)
+	if not ok then
+		return nil, err
+	end
+	return link, nil
 end
 
 -- Resolve where the worktree for `ctx` should live, honouring a user supplied override.

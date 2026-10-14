@@ -189,6 +189,51 @@ describe("worktree", function()
 		end)
 	end)
 
+	describe("resolve_link", function()
+		local ctx = { repo_root = "/repo", head_sha = "abc" }
+
+		it("returns a static list as is", function()
+			assert.same({ "node_modules" }, worktree.resolve_link(ctx, { link = { "node_modules" } }))
+		end)
+
+		it("defaults to an empty list", function()
+			assert.same({}, worktree.resolve_link(ctx, {}))
+			assert.same({}, worktree.resolve_link(ctx, { link = function() end }))
+		end)
+
+		it("calls a function with the context", function()
+			local seen
+			local link = worktree.resolve_link(ctx, {
+				link = function(arg)
+					seen = arg
+					return { "app/node_modules" }
+				end,
+			})
+			assert.same({ "app/node_modules" }, link)
+			assert.equals(ctx, seen)
+		end)
+
+		it("validates what a function returns", function()
+			local link, err = worktree.resolve_link(ctx, {
+				link = function()
+					return { "../secrets" }
+				end,
+			})
+			assert.is_nil(link)
+			assert.is_truthy(err:find("escape"))
+		end)
+
+		it("reports a function that raises", function()
+			local link, err = worktree.resolve_link(ctx, {
+				link = function()
+					error("boom")
+				end,
+			})
+			assert.is_nil(link)
+			assert.is_truthy(err:find("boom"))
+		end)
+	end)
+
 	describe("claim", function()
 		local claimed = {}
 		after_each(function()

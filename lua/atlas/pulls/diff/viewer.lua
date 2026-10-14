@@ -808,7 +808,9 @@ local function setup_ui(session)
 
 	vim.cmd.tcd(vim.fn.fnameescape(result.root))
 
-	session.commits = commits.create(result.commits, explorer_options.show_commits)
+	local show_commits = explorer_options.show_commits
+	session.commits =
+		commits.create(result.commits, show_commits == true or (show_commits == "multiple" and #result.commits > 1))
 	session.review_panel = review_panel.create(result, {
 		on_resize = function()
 			resize(session)

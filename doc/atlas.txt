@@ -315,7 +315,7 @@ PULLS CONFIGURATION                              *atlas-pulls-configuration*
         explorer = {
           grouped = true, -- group changed files by directory
           hidden = false,
-          show_commits = false, -- set true to show commits below changed files initially
+          show_commits = false, -- true shows commits below changed files initially; "multiple" only for multi-commit PRs
           width = 40,
           initial_focus = "explorer", -- "explorer" or "diff"
           preview = false, -- show a file when the explorer cursor moves onto it
@@ -381,6 +381,8 @@ or nil.
 Set `pulls.diff.lsp.link` to dependency folders such as `node_modules` or `.venv`.
 Atlas symlinks them from your checkout into the worktree so language servers
 can resolve dependencies. These are the same directories on disk, not copies.
+`link` may also be a function receiving `{ repo_root, repo_full_name, pr_id,
+head_sha }` that returns the list.
 
 ------------------------------------------------------------------------------
 PIPELINES                                             *atlas-pulls-pipelines*

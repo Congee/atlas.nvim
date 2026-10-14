@@ -201,12 +201,19 @@ local function start_loading(message, context, on_done)
 
 			view:update("Preparing worktree...")
 			local pr = pr_data.pr
-			local dir, claim_err = worktree.claim({
+			local ctx = {
 				repo_root = source.root,
 				head_sha = source.head_revision,
 				repo_full_name = pr and pr.repo_full_name,
 				pr_id = pr and pr.id,
-			}, options.lsp)
+			}
+			local link, link_err = worktree.resolve_link(ctx, options.lsp)
+			if not link then
+				notify.warn("LSP worktree unavailable: " .. link_err)
+				complete()
+				return
+			end
+			local dir, claim_err = worktree.claim(ctx, options.lsp)
 			if not dir then
 				notify.warn("LSP worktree unavailable: " .. claim_err)
 				complete()
@@ -221,7 +228,7 @@ local function start_loading(message, context, on_done)
 					repo_root = source.root,
 					head_sha = source.head_revision,
 					dir = dir,
-					link = options.lsp.link,
+					link = link,
 				}, done)
 			end, function(path, prepare_err)
 				if not path then

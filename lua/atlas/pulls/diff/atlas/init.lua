@@ -164,6 +164,8 @@ local function set_right_buffer(view, buf)
 
 	-- Our own buffer switches should not trigger another file load.
 	view.right.buf = buf
+	-- A hidden buffer stays part of the diff, so leave diff mode before swapping it out.
+	vim.wo[view.right.win][0].diff = false
 	vim.api.nvim_win_set_buf(view.right.win, buf)
 	setup_window(view.right.win)
 end

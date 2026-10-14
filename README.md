@@ -419,13 +419,14 @@ pulls = {
       -- { repo_root, repo_full_name, pr_id, head_sha, default } that returns a path or nil.
       dir = nil,
       -- Directories symlinked from your checkout into the worktree so servers can resolve
-      -- dependencies. These are the same directories on disk, not copies.
+      -- dependencies. These are the same directories on disk, not copies. May also be a function
+      -- receiving { repo_root, repo_full_name, pr_id, head_sha } that returns the list.
       link = {}, -- e.g. { "node_modules", ".venv" }
     },
     explorer = {
       grouped = true, -- Group changed files by directory.
       hidden = false,
-      show_commits = false, -- Set true to show commits below changed files initially.
+      show_commits = false, -- Set true to show commits below changed files initially; "multiple" only for multi-commit PRs.
       width = 40,
       initial_focus = "explorer", -- "explorer" or "diff".
       preview = false, -- Show a file as soon as the explorer cursor moves onto it.
